@@ -38,8 +38,8 @@ class SuggestionList(BaseModel):
 
 class SlideContent(BaseModel):
     slide_index: int = Field(description="Sequential index starting at 1")
-    title: str = Field(description="Slide title")
-    bullet_points: List[str] = Field(description="3-5 impactful bullet points")
+    title: str = Field(description="Slide title capturing a concrete insight or conclusion.")
+    bullet_points: List[str] = Field(description="3-5 highly impactful bullets containing real data metrics/figures.")
 
 class PresentationDeck(BaseModel):
     slides: List[SlideContent]
@@ -49,7 +49,7 @@ class ChartSpecification(BaseModel):
     x_column: str = Field(description="Exact column for X-axis from schema")
     y_column: str = Field(description="Exact column for Y-axis from schema")
     chart_type: str = Field(description="'bar', 'line', or 'scatter'")
-    key_takeaways: List[str] = Field(description="3 contextual bullets explaining what this chart demonstrates.")
+    key_takeaways: List[str] = Field(description="3 concrete bullet points explaining what this specific data trend means.")
 
 class PresentationState(TypedDict):
     messages: Annotated[list, add_messages]
@@ -90,11 +90,44 @@ def add_styled_text(tf, text, size_pt, bold=False, color_rgb=NAVY_PRIMARY, is_fi
 # --- 3. Graph Nodes ---
 
 def ingest_and_summarize(state: PresentationState):
+    """Step 0: Dynamically processes the dataset matrix rows to build real data profiles."""
     schema = state["schema_info"]
-    prompt = f"Analyze this dataset schema and provide a brief summary:\n{schema}"
+    
+    # CRITICAL FIX: Load the real data matrix to pull actual values, limits, and metrics
+    df = pd.read_json(io.StringIO(state["dataframe_json"]))
+    
+    profile_summary = []
+    profile_summary.append(f"Total Rows Processed: {len(df)}, Total Variables: {len(df.columns)}")
+    
+    # Isolate Numeric Features and compile statistical distributions
+    num_cols = df.select_dtypes(include=['number']).columns.tolist()
+    if num_cols:
+        profile_summary.append("\n--- Statistical Distributions (Metrics, Averages, Ranges) ---")
+        profile_summary.append(df[num_cols].describe().to_string())
+        
+    # Isolate Categorical Features and extract core item distributions
+    cat_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
+    if cat_cols:
+        profile_summary.append("\n--- Categorical Attribute Distributions (Top Values) ---")
+        for col in cat_cols[:4]:  # Top 4 categorical metrics to safeguard prompt window limits
+            profile_summary.append(f"Column '{col}' Frequent Occurrences:\n{df[col].value_counts().head(3).to_string()}")
+            
+    profile_summary.append("\n--- Data Sample Frame Snapshot ---")
+    profile_summary.append(df.head(5).to_string())
+    
+    compiled_profile = "\n".join(profile_summary)
+    
+    prompt = f"""
+    You are an expert Data Scientist and Executive Business Analyst. 
+    Analyze this raw statistical profile of the uploaded file and summarize the most critical numbers, records, milestones, averages, and findings:
+    
+    {compiled_profile}
+    
+    Provide a robust analysis summary. Highlight clear anomalies, performance ceilings, numeric metrics, or value concentrations.
+    """
     response = llm.invoke([SystemMessage(content=prompt)])
     
-    msg = (f"### Data Ingestion Summary\n{response.content}\n\n"
+    msg = (f"### 📊 Data Profile Analysis Compiled\n{response.content}\n\n"
            "Let's build your presentation. **First, who is the target persona or audience?**")
     
     return {
@@ -112,7 +145,7 @@ def process_wizard_step(state: PresentationState):
     sugg_llm = llm.with_structured_output(SuggestionList)
 
     if step == "persona":
-        prompt = f"Given data schema:\n{schema}\nAnd persona: {user_input}\nSuggest 3 key analytical topics or scenarios."
+        prompt = f"Given data summary profile:\n{state['data_summary']}\nAnd persona: {user_input}\nSuggest 3 key analytical topics or scenarios."
         topics = sugg_llm.invoke([SystemMessage(content=prompt)]).suggestions
         return {
             "persona": user_input,
@@ -130,7 +163,7 @@ def process_wizard_step(state: PresentationState):
         }
 
     elif step == "pages":
-        prompt = f"Data schema: {schema}\nPersona: {state['persona']}\nTopics: {state['topics']}\nSuggest 3 catchy Presentation Titles."
+        prompt = f"Data Summary Context: {state['data_summary']}\nPersona: {state['persona']}\nTopics: {state['topics']}\nSuggest 3 catching, metric-focused Presentation Titles."
         titles = sugg_llm.invoke([SystemMessage(content=prompt)]).suggestions
         return {
             "pages": user_input,
@@ -140,7 +173,7 @@ def process_wizard_step(state: PresentationState):
         }
 
     elif step == "title":
-        prompt = f"Data schema: {schema}\nSuggest 3 relevant graphs (e.g., 'Bar chart of Revenue vs Date')."
+        prompt = f"Data Summary Context: {state['data_summary']}\nSuggest 3 relevant analytical graphs matching these statistics."
         graphs = sugg_llm.invoke([SystemMessage(content=prompt)]).suggestions
         return {
             "title": user_input,
@@ -150,30 +183,36 @@ def process_wizard_step(state: PresentationState):
         }
 
     elif step == "graph":
-        # Gather all information and generate draft structure before finalizing
+        # CRITICAL FIX: Force the layout generator to embed actual metrics into the presentation plan
         generation_prompt = f"""
-        Create a detailed step-by-step structural blueprint deck outline based on:
-        Schema: {schema}
-        Summary Context: {state['data_summary']}
-        Title Chosen: {state['title']}
-        Audience: {state['persona']}
-        Key Topics: {state['topics']}
-        Target Slides Count: {user_input}
-        Generate slide metadata with titles and explicit bullets for each slide.
+        You are an elite corporate slide content designer. Create a highly detailed, data-grounded presentation deck outline.
+        
+        CRITICAL RULE: Do NOT use generic text or placeholder statements like 'Analyze metrics' or 'Review performance trends'. Instead, you MUST extract real metrics, numbers, milestones, values, and trends from the Data Profile Context below and embed them explicitly into the slide titles and bullet points.
+        
+        Data Profile Context:
+        {state['data_summary']}
+        
+        Presentation Blueprint Directives:
+        - Title: {state['title']}
+        - Target Audience: {state['persona']}
+        - Objective / Scenario Focus: {state['topics']}
+        - Target Length: {user_input} Slides
+        
+        Generate slide metadata. Make sure every single slide contains actual data insights from the file context.
         """
         deck_draft = llm.with_structured_output(PresentationDeck).invoke([SystemMessage(content=generation_prompt)])
         slides_dict = [slide.model_dump() for slide in deck_draft.slides]
         
         msg = ("### 🛠️ Review Slide Deck Plan Blueprint\n"
-               "I have compiled the proposed layout configuration framework. "
+               "I have compiled the proposed layout configuration framework using your data points. "
                "Review the outline structure in the **Layout Blueprint Preview Panel** on the right side. "
-               "You can ask me to change specific details (e.g., *'Change Title of slide 2'*) or approve directly.")
+               "You can ask me to change specific details or approve directly.")
         
         return {
             "graph_request": user_input,
             "current_step": "review_slides",
             "draft_slides": slides_dict,
-            "suggestions": ["Approve Plan & Compile", "Rewrite Slide 1", "Add more details"],
+            "suggestions": ["Approve Plan & Compile", "Make it more concise", "Add a slide summary"],
             "messages": [AIMessage(content=msg)]
         }
 
@@ -185,14 +224,18 @@ def process_wizard_step(state: PresentationState):
                 "messages": [AIMessage(content="⚙️ Compilation approved. Building widescreen layouts and generating charts...")]
             }
         else:
-            # Edit request loop logic processing modifications directly against the current state blueprint
             edit_prompt = f"""
-            You are a rigorous layout blueprint architecture modifier.
+            You are a rigorous layout blueprint modifier. You modify existing slide blueprints while keeping real data elements intact.
+            
+            Data Profile Foundation:
+            {state['data_summary']}
+
             Current Draft Slide Blueprint Configuration:
             {json.dumps(state.get('draft_slides', []))}
 
             User Modification Command: "{user_input}"
-            Modify the JSON schema layout plan strictly conforming to instructions. Keep other structural elements pristine.
+            
+            Modify the structural layout array according to the instructions. Ensure every slide bullet remains grounded in data points from the file profile context.
             """
             updated_deck = llm.with_structured_output(PresentationDeck).invoke([SystemMessage(content=edit_prompt)])
             slides_dict = [slide.model_dump() for slide in updated_deck.slides]
@@ -204,8 +247,7 @@ def process_wizard_step(state: PresentationState):
             }
 
 def generate_presentation(state: PresentationState):
-    """Final Step: Generates the actual PPTX based strictly on the approved draft_slides schema state."""
-    # Generate Graph Specs based on user request
+    """Final Step: Generates the actual PPTX based strictly on the approved data-rich blueprint."""
     graph_prompt = f"Schema: {state['schema_info']}\nUser requested graph: {state['graph_request']}\nDetermine chart config."
     chart_spec = llm.with_structured_output(ChartSpecification).invoke([SystemMessage(content=graph_prompt)])
     
@@ -239,7 +281,7 @@ def generate_presentation(state: PresentationState):
     except Exception as e:
         print(f"Graph Error: {e}")
 
-    # Build PPTX with modern Widescreen (16:9) Configuration
+    # Build PPTX with Widescreen configuration
     prs = Presentation()
     prs.slide_width = Inches(13.333)
     prs.slide_height = Inches(7.5)
@@ -275,10 +317,8 @@ def generate_presentation(state: PresentationState):
         tf_title.word_wrap = True
         add_styled_text(tf_title, chart_spec.chart_title, 32, bold=True, color_rgb=NAVY_PRIMARY, is_first=True)
         
-        # Left Picture Frame Placement
         slide.shapes.add_picture(chart_bytes, Inches(0.8), Inches(1.8), width=Inches(6.5))
         
-        # Right Narrative Frame Placement
         explanation_box = slide.shapes.add_textbox(Inches(7.6), Inches(1.8), Inches(4.8), Inches(4.8))
         tf_explain = explanation_box.text_frame
         tf_explain.word_wrap = True
@@ -295,7 +335,7 @@ def generate_presentation(state: PresentationState):
         "current_step": "done",
         "final_pptx_bytes": output_stream.getvalue(),
         "chart_img_base64": chart_base64,
-        "messages": [AIMessage(content="🎉 **Success!** Your finalized presentation layout is fully processed and ready for download.")]
+        "messages": [AIMessage(content="🎉 **Success!** Your presentation has been built with real, data-grounded metrics and widescreen formatting.")]
     }
 
 # --- 4. State Machine Routing ---
