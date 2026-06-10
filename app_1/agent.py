@@ -86,25 +86,22 @@ def add_styled_text(tf, text, size_pt, bold=False, color_rgb=NAVY_PRIMARY, is_fi
 # --- 3. Graph Nodes ---
 
 def ingest_and_summarize(state: PresentationState):
-    """Step 0: Processes dataset using semantic type detection to isolate structural codes from math attributes."""
     df = pd.read_json(io.StringIO(state["dataframe_json"]))
     
-    # CORE FIX: Heuristic check to identify and cast semantic ID variables to qualitative strings
+    # Cast identity columns to qualitative string features to guarantee data cleaning safety
     for col in df.columns:
         col_lower = str(col).lower()
-        if any(kw in col_lower for kw in ['id', 'code', 'invoice', 'zip', 'phone', 'account', 'serial', 'sl', 'no.']):
+        if any(kw in col_lower for kw in ['id', 'code', 'invoice', 'zip', 'phone', 'account', 'serial', 'sl']):
             df[col] = df[col].astype(str)
             
     profile_summary = []
     profile_summary.append(f"Total Rows Processed: {len(df)}, Total Schema Fields: {len(df.columns)}")
     
-    # Isolate legitimate numerical features
     num_cols = df.select_dtypes(include=['number']).columns.tolist()
     if num_cols:
         profile_summary.append("\n--- Statistical Distributions (True Math Metrics) ---")
         profile_summary.append(df[num_cols].describe().to_string())
         
-    # Categoricals and identifiers combined
     cat_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
     if cat_cols:
         profile_summary.append("\n--- Nominal Variables & Identifier Attributes Distributions ---")
@@ -180,14 +177,30 @@ def process_wizard_step(state: PresentationState):
         }
 
     elif step == "graph":
+        # AUDIENCE ADAPTATION ENGINE LAYER
+        persona_lower = str(state.get("persona", "")).lower()
+        if any(w in persona_lower for w in ["analyst", "analytics", "scientist", "engineer", "data"]):
+            audience_guardrail = """
+            CRITICAL DIRECTIVE: TARGET AUDIENCE IS A DATA ANALYST.
+            - Eliminate high-level observations, qualitative fluff, or basic introductory definitions.
+            - Slide titles must capture an absolute metric state or finding (e.g., 'Total Cost Peaked at $4.2M with 14% Variance' instead of 'Cost Optimization Overview').
+            - Every bullet point must include explicit figures, counts, ratios, math sample boundaries, or statistical limits extracted directly from the profile summary.
+            """
+        else:
+            audience_guardrail = """
+            CRITICAL DIRECTIVE: TARGET AUDIENCE IS GENERAL MANAGEMENT.
+            - Blend clear, factual quantitative data metrics with operational takeaways, business strategic insights, and summaries.
+            """
+
         generation_prompt = f"""
-        Create a presentation blueprint framework outline.
-        CRITICAL RULE: Embed real numerical metrics and specific facts from the file summary profile below. Do NOT use placeholder statements.
+        You are an expert slide deck content architect. Create a comprehensive presentation blueprint framework outline.
+        
+        {audience_guardrail}
         
         Data Summary Profile Context:
         {state['data_summary']}
         
-        Presentation Blueprints Directives:
+        Presentation Blueprint Directives:
         - Title: {state['title']}
         - Target Audience: {state['persona']}
         - Core Objective: {state['topics']}
@@ -197,14 +210,15 @@ def process_wizard_step(state: PresentationState):
         slides_dict = [slide.model_dump() for slide in deck_draft.slides]
         
         msg = ("### 🛠️ Review Slide Deck Plan Blueprint\n"
-               "Review the outline structure in the **Layout Blueprint Preview Panel** on the right side. "
-               "You can modify any slide or bullet point by typing your changes below, or proceed by approving the plan.")
+               "The proposed layout configuration framework has been compiled. "
+               "You can **manually edit any slide title or bullet point directly in the outline panel on the right**, "
+               "or use the chat below to make bulk changes. Click **Approve Plan & Compile** when you are ready to finalize.")
         
         return {
             "graph_request": user_input,
             "current_step": "review_slides",
             "draft_slides": slides_dict,
-            "suggestions": ["Approve Plan & Compile", "Make headings punchier", "Add a slide summary"],
+            "suggestions": ["Approve Plan & Compile", "Make headings punchier", "Add more data insights"],
             "messages": [AIMessage(content=msg)]
         }
 
@@ -235,7 +249,6 @@ def process_wizard_step(state: PresentationState):
             }
 
 def generate_presentation(state: PresentationState):
-    """Final Step: Renders professional charts and widescreen PPTX file streams."""
     graph_prompt = f"Schema: {state['schema_info']}\nUser requested graph: {state['graph_request']}\nDetermine chart config."
     chart_spec = llm.with_structured_output(ChartSpecification).invoke([SystemMessage(content=graph_prompt)])
     
@@ -246,7 +259,6 @@ def generate_presentation(state: PresentationState):
     
     try:
         if "no graph" not in state['graph_request'].lower():
-            # Modern styling adjustments for high-end matplotlib output
             plt.rcParams['font.family'] = 'sans-serif'
             plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'Segoe UI']
             
@@ -256,17 +268,14 @@ def generate_presentation(state: PresentationState):
             ax.spines['left'].set_color('#cbd5e1')
             ax.spines['bottom'].set_color('#cbd5e1')
             
-            # Draw underlying clean workspace grid lines
             ax.set_axisbelow(True)
             ax.yaxis.grid(True, color='#f1f5f9', linestyle='-', linewidth=1)
             
             sample_df = df.head(10).copy()
-            # If columns are semantic qualitative codes, format appropriately
             sample_df[chart_spec.x_column] = sample_df[chart_spec.x_column].astype(str)
             
             if chart_spec.chart_type == 'bar':
                 bars = ax.bar(sample_df[chart_spec.x_column], sample_df[chart_spec.y_column], color="#2563eb", width=0.55, edgecolor='none')
-                # Draw discrete numerical metric labels straight on top of columns
                 for bar in bars:
                     yval = bar.get_height()
                     ax.text(bar.get_x() + bar.get_width()/2, yval + (yval * 0.01), f"{yval:,.0f}", ha='center', va='bottom', fontsize=8, color='#475569', weight='bold')
