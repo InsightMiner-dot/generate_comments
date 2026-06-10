@@ -71,7 +71,17 @@ async def chat_websocket(websocket: WebSocket, session_id: str):
                     if "messages" in value:
                         bot_response = value["messages"][-1].content
                         suggs = value.get("suggestions", [])
-                        await websocket.send_json({"type": "message", "content": bot_response, "suggestions": suggs})
+                        
+                        # Fetch the dynamic state blueprint to stream downstream adjustments to client UI
+                        current_state = app_engine.get_state(config).values
+                        draft_slides = current_state.get("draft_slides", [])
+                        
+                        await websocket.send_json({
+                            "type": "message", 
+                            "content": bot_response, 
+                            "suggestions": suggs,
+                            "draft_slides": draft_slides
+                        })
                         
             state = app_engine.get_state(config).values
             if state.get("output_ready"):
