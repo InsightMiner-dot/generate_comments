@@ -46,12 +46,16 @@
         .ai-msg { align-self: flex-start; background: #f8fafc; border-left: 3px solid var(--primary); }
         .user-msg { align-self: flex-end; background: var(--surface); border: 1px solid var(--border); }
         
-        .preview-desk-container { width: 420px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; height: 100%; }
+        .preview-desk-container { width: 440px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; height: 100%; }
         .blueprint-card { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: none; flex-direction: column; gap: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05); }
         .blueprint-title { font-weight: 600; font-size: var(--font-sm); color: var(--bg-dark); border-bottom: 1px solid var(--border); padding-bottom: 8px; }
-        .blueprint-item { padding: 10px; background: #fafafa; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 8px; }
-        .blueprint-item h4 { font-weight: 600; color: var(--primary); margin-bottom: 4px; }
-        .blueprint-item ul { padding-left: 16px; font-size: var(--font-xs); color: var(--text-muted); }
+        
+        /* Direct Layout Editing Components UI fields */
+        .blueprint-item { padding: 12px; background: #fafafa; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px; }
+        .blueprint-item label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; }
+        .blueprint-item input[type="text"] { width: 100%; padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; font-weight: 600; outline: none; }
+        .blueprint-item textarea { width: 100%; padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 12px; font-family: inherit; resize: vertical; outline: none; line-height: 1.4; }
+        .blueprint-item input:focus, .blueprint-item textarea:focus { border-color: var(--primary); }
 
         .suggestions-bar { padding: 10px 24px; background: #fafafa; border-top: 1px solid var(--border); display: flex; gap: 8px; overflow-x: auto; }
         .suggestion-chip { padding: 6px 12px; background: white; border: 1px solid var(--border); border-radius: 16px; font-size: var(--font-xs); cursor: pointer; white-space: nowrap; transition: 0.2s; color: var(--primary); font-weight: 500; }
@@ -105,14 +109,14 @@
                     <div class="chat-history" id="chatHistory"></div>
                     <div class="suggestions-bar" id="suggestionsBar" style="display: none;"></div>
                     <div class="chat-input-area">
-                        <input type="text" id="chatInput" placeholder="Type changes to modify any slide layout..." onkeypress="handleEnter(event)" disabled>
+                        <input type="text" id="chatInput" placeholder="Type general requests or modify slides directly on the right..." onkeypress="handleEnter(event)" disabled>
                         <button class="btn btn-primary" id="sendBtn" onclick="sendChatMessage()" disabled>Send</button>
                     </div>
                 </div>
                 
                 <div class="preview-desk-container">
                     <div class="blueprint-card" id="blueprintDeskCard">
-                        <div class="blueprint-title">🛠️ Layout Blueprint Outline</div>
+                        <div class="blueprint-title">🛠️ Interactive Blueprint Blueprint Editor</div>
                         <div id="blueprintStack"></div>
                     </div>
                     <div class="blueprint-card" id="chartCard">
@@ -155,7 +159,6 @@
                 const response = await fetch("/api/upload", { method: "POST", body: formData });
                 const data = await response.json();
                 
-                // Intercept step for multiple sheets
                 if (data.requires_sheet_selection) {
                     sheetSelect.innerHTML = "";
                     data.sheets.forEach(sh => {
@@ -229,15 +232,53 @@
             const stack = document.getElementById("blueprintStack");
             stack.innerHTML = "";
             slides.forEach(slide => {
+                const sIdx = slide.slide_index;
                 const block = document.createElement("div");
                 block.className = "blueprint-item";
-                let bulletsHTML = "";
-                slide.bullet_points.forEach(bp => bulletsHTML += `<li>${bp}</li>`);
-                block.innerHTML = `<h4>Slide ${slide.slide_index || '#'}: ${slide.title}</h4><ul>${bulletsHTML}</ul>`;
+                
+                // Unroll points by newline break strings to form structured editable configurations
+                const bulletsText = slide.bullet_points.join("\n");
+                
+                block.innerHTML = `
+                    <label>Slide ${sIdx} Title</label>
+                    <input type="text" id="edit-title-${sIdx}" value="${slide.title}">
+                    
+                    <label style="margin-top:4px;">Bullet Points (One per line)</label>
+                    <textarea id="edit-bullets-${sIdx}" rows="4">${bulletsText}</textarea>
+                    
+                    <button class="btn btn-primary" style="padding:4px 8px; font-size:11px; margin-top:4px; align-self:flex-end; background:var(--primary);" onclick="saveSlideDirect(${sIdx})">💾 Save Changes</button>
+                `;
                 stack.appendChild(block);
             });
             document.getElementById("blueprintDeskCard").style.display = "flex";
         }
+
+        function saveSlideDirect(sIdx) {
+            const titleValue = document.getElementById(`edit-title-${sIdx}`).value;
+            const bulletsValue = document.getElementById(`edit-bullets-${sIdx}`).value.split("\n").filter(b => b.trim() !== "");
+            
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                // Route direct sync changes payload event packets to backend state machines
+                ws.send(JSON.stringify({
+                    type: "direct_edit",
+                    slide_index: sIdx,
+                    title: titleValue,
+                    bullet_points: bulletsValue
+                }));
+            }
+        }
+
+        function sendChatMessage() {
+            const input = document.getElementById("chatInput");
+            const text = input.value.trim();
+            if (!text || !ws) return;
+            appendMessage("user-msg", text);
+            ws.send(JSON.stringify({ type: "chat", content: text }));
+            input.value = "";
+            document.getElementById("suggestionsBar").style.display = "none";
+        }
+
+        function handleEnter(e) { if (e.key === 'Enter') sendChatMessage(); }
 
         function renderSuggestions(suggestions) {
             const bar = document.getElementById("suggestionsBar");
@@ -258,18 +299,6 @@
                 bar.appendChild(chip);
             });
         }
-
-        function sendChatMessage() {
-            const input = document.getElementById("chatInput");
-            const text = input.value.trim();
-            if (!text || !ws) return;
-            appendMessage("user-msg", text);
-            ws.send(text);
-            input.value = "";
-            document.getElementById("suggestionsBar").style.display = "none";
-        }
-
-        function handleEnter(e) { if (e.key === 'Enter') sendChatMessage(); }
 
         function appendMessage(className, text) {
             const history = document.getElementById("chatHistory");
