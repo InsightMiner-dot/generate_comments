@@ -4,7 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import streamlit as st
-from typing import TypedDict, Annotated, Dict, List
+from typing import TypedDict, Annotated, Dict, List, Any
 from pydantic import BaseModel, Field
 
 from dotenv import load_dotenv
@@ -35,10 +35,6 @@ azure_api_key = os.getenv("AZURE_OPENAI_KEY")
 azure_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT")
 azure_api_version = os.getenv("AZURE_OPENAI_API_VERSION")
 model_name = os.getenv("MODEL_NAME")
-
-if not azure_api_key or not azure_endpoint:
-    st.error("Missing Azure OpenAI credentials. Please verify your `.env` file configuration.")
-    st.stop()
 
 # Initialize LLM
 llm = AzureChatOpenAI(
@@ -79,6 +75,7 @@ class PresentationState(TypedDict):
     presentation_params: Dict[str, str]
     dataframe_json: str  
     output_ready: bool
+    deck_preview: Dict[str, Any]  # Added to store slide previews for the UI
 
 # ==========================================
 # 4. Graph Architecture Nodes
@@ -156,6 +153,7 @@ def generate_presentation_content(state: PresentationState):
     structured_llm = llm.with_structured_output(PresentationDeck)
     deck_data = structured_llm.invoke([SystemMessage(content=prompt)])
     
+    # 1. Visualization Rendering
     df = pd.read_json(io.StringIO(state["dataframe_json"]))
     chart_spec = deck_data.chart_suggestion
     chart_bytes = io.BytesIO()
@@ -178,10 +176,13 @@ def generate_presentation_content(state: PresentationState):
         chart_bytes.seek(0)
         plt.close()
         has_plot = True
+        
+        # Save image bytes to session state so we can preview it in Streamlit
+        st.session_state["chart_image_bytes"] = chart_bytes.getvalue()
     except Exception as chart_err:
         print(f"Chart render warning: {chart_err}")
 
-    # Build PPTX File
+    # 2. PPTX Generation
     prs = Presentation()
     
     # Title Slide
@@ -214,9 +215,13 @@ def generate_presentation_content(state: PresentationState):
     
     st.session_state["final_pptx_bytes"] = output_stream.getvalue()
     
+    # Handle Pydantic v1 vs v2 dict export safely for the state preview
+    preview_dict = deck_data.model_dump() if hasattr(deck_data, "model_dump") else deck_data.dict()
+    
     return {
         "output_ready": True,
-        "messages": [AIMessage(content="✅ **Success!** Your presentation has been fully compiled with the embedded data visualization.")]
+        "deck_preview": preview_dict,
+        "messages": [AIMessage(content="✅ **Success!** Your presentation has been fully compiled. Review the slides below and download your file.")]
     }
 
 def route_step(state: PresentationState):
@@ -253,7 +258,7 @@ workflow_engine = compile_engine_workflow()
 st.title("📊 Multi-Horizon Data Profiler & Presentation Generator")
 
 if "thread_id" not in st.session_state:
-    st.session_state["thread_id"] = "persistent_session_final"
+    st.session_state["thread_id"] = "persistent_session_preview"
 if "chat_history" not in st.session_state:
     st.session_state["chat_history"] = []
 if "file_processed" not in st.session_state:
@@ -285,6 +290,7 @@ with st.sidebar:
                     "missing_params": ["commentary_type", "persona", "topics", "pages", "title"],
                     "presentation_params": {},
                     "output_ready": False,
+                    "deck_preview": {},
                     "messages": []
                 }
                 
@@ -340,24 +346,25 @@ if st.session_state["file_processed"]:
         else:
             st.info("No numeric column fields found.")
 
-    # PAGE 2: Agentic Chat & Generation UI
+    # PAGE 2: Agentic Chat, Slide Preview & Generation UI
     with tab2:
         st.subheader("Interactive Presentation Builder")
         
-        chat_container = st.container(height=400)
-        with chat_container:
-            for role, message in st.session_state["chat_history"]:
-                with st.chat_message(role):
-                    st.markdown(message)
-                    
         # Extract graph state memory
         state_snapshot = workflow_engine.get_state(config)
         state_values = state_snapshot.values if state_snapshot else {}
         missing_params = state_values.get("missing_params", [])
         output_ready = state_values.get("output_ready", False)
-
-        st.markdown("---")
         
+        # Hide the chat container once output is ready to focus on the preview
+        if not output_ready:
+            chat_container = st.container(height=400)
+            with chat_container:
+                for role, message in st.session_state["chat_history"]:
+                    with st.chat_message(role):
+                        st.markdown(message)
+            st.markdown("---")
+
         # --- CONDITIONAL UI RENDERING ---
         if not output_ready:
             if missing_params:
@@ -395,14 +402,39 @@ if st.session_state["file_processed"]:
                 st.rerun()
                 
         else:
-            # Output is ready: Display Download Button Inline
-            st.success("🎉 Presentation compiled successfully! The deck includes your structured insights and the automated graph.")
+            # 1. Display Slide-by-Slide Content Preview
+            st.markdown("### 📑 Presentation Deck Preview")
             
-            final_title = state_values.get('presentation_params', {}).get('title', 'Automated_Insights')
+            deck_preview = state_values.get("deck_preview", {})
+            if deck_preview:
+                slides = deck_preview.get("slides", [])
+                
+                # Title Slide Preview Card
+                with st.container(border=True):
+                    final_title = state_values.get('presentation_params', {}).get('title', 'Automated Insights')
+                    st.markdown(f"#### Slide 1 (Title Slide): {final_title}")
+                    st.caption(f"Prepared for: {state_values.get('presentation_params', {}).get('persona', '')}")
+                
+                # Content Slide Preview Cards
+                for i, slide_data in enumerate(slides):
+                    with st.container(border=True):
+                        st.markdown(f"#### Slide {i + 2}: {slide_data.get('title')}")
+                        for bp in slide_data.get("bullet_points", []):
+                            st.markdown(f"- {bp}")
+                
+                # Chart Slide Preview Card
+                chart_info = deck_preview.get("chart_suggestion", {})
+                if chart_info and "chart_image_bytes" in st.session_state:
+                    with st.container(border=True):
+                        st.markdown(f"#### Slide {len(slides) + 2} (Chart): {chart_info.get('chart_title')}")
+                        st.image(st.session_state["chart_image_bytes"], use_container_width=True)
+
+            st.markdown("---")
+            
+            # 2. Final Download Button
             safe_title = final_title.replace(" ", "_")
-            
             st.download_button(
-                label="📥 Download Generated Presentation (.pptx)",
+                label="📥 Download Final PowerPoint (.pptx)",
                 data=st.session_state["final_pptx_bytes"],
                 file_name=f"{safe_title}.pptx",
                 mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
