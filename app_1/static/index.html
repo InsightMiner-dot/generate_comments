@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Enterprise Insights Engine</title>
+    <title>Enterprise Insights Lab Engine</title>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
-        :root { --bg-dark: #09090b; --bg-main: #ffffff; --surface: #f4f4f5; --border: #e4e4e7; --text-main: #09090b; --text-muted: #71717a; --accent: #18181b; --primary: #2563eb; --font-xs: 12px; --font-sm: 13px; --font-md: 14px; }
+        :root { --bg-dark: #09090b; --bg-main: #ffffff; --surface: #f4f4f5; --border: #e4e4e7; --text-main: #09090b; --text-muted: #71717a; --accent: #18181b; --primary: #2563eb; --danger: #ef4444; --success: #10b981; --font-xs: 12px; --font-sm: 13px; --font-md: 14px; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: ui-sans-serif, system-ui, sans-serif; font-size: var(--font-sm); color: var(--text-main); background: var(--bg-main); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        body { font-family: ui-sans-serif, system-ui, sans-serif; font-size: var(--font-sm); color: var(--text-main); background: #f8fafc; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 
-        .top-navbar { height: 60px; background: var(--bg-dark); color: #a1a1aa; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; border-bottom: 1px solid #27272a; z-index: 100; }
+        .top-navbar { height: 60px; background: var(--bg-dark); color: #a1a1aa; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; border-bottom: 1px solid #27272a; flex-shrink: 0; }
         .brand { font-weight: 600; font-size: var(--font-md); color: white; }
         .nav-tabs { display: flex; gap: 8px; height: 100%; align-items: center; }
         .nav-tab { padding: 8px 16px; cursor: pointer; font-weight: 500; transition: 0.2s; border-radius: 6px; color: #a1a1aa; }
@@ -18,7 +18,7 @@
         .nav-tab.active { background: #18181b; color: white; border: 1px solid #27272a; }
         .nav-tab.locked { opacity: 0.4; cursor: not-allowed; }
         
-        .main-workspace { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: #fafafa; }
+        .main-workspace { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: #f1f5f9; }
         .content { flex: 1; overflow-y: auto; padding: 24px; display: none; flex-direction: column; gap: 24px; height: 100%; }
         .content.active { display: flex; }
 
@@ -30,21 +30,28 @@
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
         
         #downloadBtn { background: #10b981; color: white; font-weight: 600; display: none; }
-        #downloadBtn:hover { background: #059669; }
 
         .upload-panel { display: flex; align-items: center; gap: 15px; padding: 16px; background: white; border: 1px solid var(--border); border-radius: 8px; }
         select { padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border); background: white; outline: none; font-size: var(--font-sm); }
         
-        .metrics-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; display: none; }
-        .metric-card { padding: 16px; border: 1px solid var(--border); border-radius: 8px; background: white; }
-        .metric-label { font-size: var(--font-xs); color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; }
-        .metric-value { font-size: 20px; font-weight: 600; }
-        .table-container { border: 1px solid var(--border); border-radius: 8px; overflow: auto; display: none; background: white; flex: 1; min-height: 300px; }
-        table { width: 100%; border-collapse: collapse; text-align: left; font-size: var(--font-xs); white-space: nowrap; }
-        th, td { padding: 10px 16px; border-bottom: 1px solid var(--border); }
-        th { background: #f8fafc; position: sticky; top: 0; border-bottom: 2px solid var(--border); }
+        /* Dashboard Modular Grid Blueprint layout dimensions */
+        .analytics-dashboard-grid { display: grid; grid-template-columns: 1fr 480px; gap: 20px; flex: 1; overflow: hidden; height: calc(100vh - 120px); }
+        .dashboard-panel-card { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; overflow: hidden; }
+        .panel-header-title { font-weight: 600; font-size: var(--font-md); color: var(--bg-dark); padding-bottom: 10px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+        .table-scroll-frame { flex: 1; overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
+        
+        table { width: 100%; border-collapse: collapse; text-align: left; font-size: var(--font-xs); }
+        th, td { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+        th { background: #f8fafc; position: sticky; top: 0; font-weight: 600; color: #475569; }
+        .type-badge { padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 10px; background: #e0f2fe; color: #0369a1; }
 
-        .chat-layout { display: flex; gap: 20px; flex: 1; overflow: hidden; height: 100%; }
+        .cleaner-toolkit-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; padding: 12px; background: #f8fafc; border: 1px solid var(--border); border-radius: 6px; }
+        .lab-workspace-frame { display: flex; flex-direction: column; gap: 12px; flex: 1; }
+        .lab-img-frame { flex: 1; background: #fafafa; border: 1px dashed #cbd5e1; border-radius: 6px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+        .lab-img-frame img { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+        /* Page 2 Strategy split views grid */
+        .chat-layout { display: flex; gap: 20px; flex: 1; overflow: hidden; height: calc(100vh - 110px); }
         .chat-container { flex: 1; border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; background: white; overflow: hidden; }
         .chat-history { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
         .message { padding: 12px 16px; border-radius: 6px; max-width: 85%; line-height: 1.5; }
@@ -64,7 +71,7 @@
 
         .blueprint-table-preview { width: 100%; font-size: 11px; margin-top: 4px; border: 1px solid #cbd5e1; border-collapse: collapse; background: white; }
         .blueprint-table-preview th { background: #e2e8f0; color: #334155; font-weight: bold; padding: 4px; border: 1px solid #cbd5e1; }
-        .blueprint-table-preview td { padding: 4px; border: 1px solid #cbd5e1; color: #475569; }
+        .blueprint-table-preview td { padding: 4px; border: 1px solid #cbd5e1; color: #000000; font-weight: 500; }
 
         .suggestions-bar { padding: 10px 24px; background: #fafafa; border-top: 1px solid var(--border); display: flex; gap: 8px; overflow-x: auto; }
         .suggestion-chip { padding: 6px 12px; background: white; border: 1px solid var(--border); border-radius: 16px; font-size: var(--font-xs); cursor: pointer; white-space: nowrap; transition: 0.2s; color: var(--primary); font-weight: 500; }
@@ -73,8 +80,7 @@
         .chat-input-area { padding: 16px 24px; background: white; border-top: 1px solid var(--border); display: flex; gap: 12px; align-items: center; }
         input[type="text"].chat-field { flex: 1; padding: 10px 16px; border: 1px solid var(--border); border-radius: 6px; outline: none; }
         input[type="text"].chat-field:focus { border-color: var(--primary); }
-        #chartCard img { width: 100%; height: auto; border-radius: 4px; border: 1px solid var(--border); margin-top: 8px; }
-
+        
         .thinking-bubble { display: flex; gap: 4px; align-items: center; padding: 12px 16px; background: #f8fafc; border-left: 3px solid var(--primary); border-radius: 6px; align-self: flex-start; max-width: 85%; }
         .thinking-dot { width: 6px; height: 6px; background: var(--text-muted); border-radius: 50%; animation: bouncingDots 1.4s infinite ease-in-out both; }
         .thinking-dot:nth-child(1) { animation-delay: -0.32s; }
@@ -88,13 +94,13 @@
 <body>
 
     <div class="top-navbar">
-        <div class="brand">Data Engine Workspace</div>
+        <div class="brand">Data Engine Analysis Workspace</div>
         <div class="nav-tabs">
             <div class="nav-tab active" id="nav-home" onclick="switchTab('home')">1. Data Quality Hub</div>
-            <div class="nav-tab locked" id="nav-builder" onclick="switchTab('builder')">2. Presentation Builder</div>
+            <div class="nav-tab locked" id="nav-builder" onclick="switchTab('builder')">2. Presentation Strategy</div>
         </div>
         <div>
-            <button class="btn" id="downloadBtn" onclick="triggerDownload()">📥 Download PowerPoint</button>
+            <button class="btn" id="downloadBtn" onclick="triggerDownload()">📥 Download PPTX Deck</button>
         </div>
     </div>
 
@@ -103,18 +109,50 @@
             <div class="upload-panel">
                 <input type="file" id="fileInput" accept=".csv, .xlsx, .xls">
                 <select id="sheetSelect" style="display: none;"></select>
-                <button class="btn btn-primary" id="uploadBtn" onclick="processUpload()">Upload & Profile</button>
+                <button class="btn btn-primary" id="uploadBtn" onclick="processUpload()">Upload & Profile Matrix</button>
             </div>
-            <div class="metrics-grid" id="metricsGrid">
-                <div class="metric-card"><div class="metric-label">Total Rows</div><div class="metric-value" id="m-rows">-</div></div>
-                <div class="metric-card"><div class="metric-label">Total Columns</div><div class="metric-value" id="m-cols">-</div></div>
-                <div class="metric-card"><div class="metric-label">Missing Cells</div><div class="metric-value" id="m-missing">-</div></div>
-                <div class="metric-card"><div class="metric-label">Duplicate Rows</div><div class="metric-value" id="m-dupes">-</div></div>
-                <div class="metric-card"><div class="metric-label">Numeric Features</div><div class="metric-value" id="m-num">-</div></div>
-                <div class="metric-card"><div class="metric-label">Memory Usage</div><div class="metric-value" id="m-mem">-</div></div>
-            </div>
-            <div class="table-container" id="tableContainer">
-                <table><thead id="tableHead"></thead><tbody id="tableBody"></tbody></table>
+            
+            <div class="analytics-dashboard-grid" id="analyticsDashboard" style="display: none;">
+                <div class="dashboard-panel-card">
+                    <div class="panel-header_title">📈 Comprehensive Statistical Framework Profile</div>
+                    <div class="table-scroll-frame">
+                        <table>
+                            <thead>
+                                <tr><th>Metric Field</th><th>Semantic Type</th><th>Missing %</th><th>Unique Count</th><th>Mean</th><th>Median</th><th>Dominant Mode</th></tr>
+                            </thead>
+                            <tbody id="statsTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div style="display: flex; flex-direction: column; gap: 20px;">
+                    <div class="dashboard-panel-card" style="flex: shrink 0;">
+                        <div class="panel-header-title">🛠️ Pipeline Data Cleaning Toolkit</div>
+                        <div class="cleaner-toolkit-bar">
+                            <button class="btn btn-secondary" style="font-size: 11px;" onclick="executePipelineClean('drop_na')">🗑️ Drop Empty Rows</button>
+                            <button class="btn btn-secondary" style="font-size: 11px;" onclick="executePipelineClean('fill_mean')">🧪 Mean Fill Missing</button>
+                            <button class="btn btn-secondary" style="font-size: 11px;" onclick="executePipelineClean('clip_outliers')">✂️ Clip 1-99% Outliers</button>
+                        </div>
+                    </div>
+                    
+                    <div class="dashboard-panel-card" style="flex: 1;">
+                        <div class="panel-header-title">🔍 Visual Insights Laboratory</div>
+                        <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                            <select id="labColSelect" style="flex: 1; font-size:12px;"></select>
+                            <select id="labPlotType" style="font-size:12px;">
+                                <option value="dist">Distribution Histogram</option>
+                                <option value="box">Outliers Spread Boxplot</option>
+                            </select>
+                            <button class="btn btn-primary" style="padding:4px 12px; font-size:12px;" onclick="renderLabVisualization()">Generate Plot</button>
+                        </div>
+                        <div class="lab-workspace-frame">
+                            <div class="lab-img-frame">
+                                <img id="labPreviewImage" src="" alt="Lab Workspace Visual Block" style="display: none;">
+                                <div id="labPlaceholderText" style="color: var(--text-muted); font-size: 12px;">Select columns above to map variables dynamically.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -124,7 +162,7 @@
                     <div class="chat-history" id="chatHistory"></div>
                     <div class="suggestions-bar" id="suggestionsBar" style="display: none;"></div>
                     <div class="chat-input-area">
-                        <input type="text" class="chat-field" id="chatInput" placeholder="Type instructions or edit the outline on the right..." onkeypress="handleEnter(event)" disabled>
+                        <input type="text" class="chat-field" id="chatInput" placeholder="Shape slides conversationally or use manual options on the right..." onkeypress="handleEnter(event)" disabled>
                         <button class="btn btn-primary" id="sendBtn" onclick="sendChatMessage()" disabled>Send</button>
                     </div>
                 </div>
@@ -171,10 +209,8 @@
             div.className = "thinking-bubble";
             div.id = "chatProcessingLoader";
             div.innerHTML = `
-                <div class="thinking-dot"></div>
-                <div class="thinking-dot"></div>
-                <div class="thinking-dot"></div>
-                <span style="margin-left: 8px; font-size: var(--font-xs); color: var(--text-muted); font-weight:500;">${label}...</span>
+                <div class="thinking-dot"></div><div class="thinking-dot"></div><div class="thinking-dot"></div>
+                <span style="margin-left:8px; font-size:var(--font-xs); color:var(--text-muted); font-weight:500;">${label}...</span>
             `;
             history.appendChild(div);
             history.scrollTop = history.scrollHeight;
@@ -187,15 +223,13 @@
 
         async function processUpload() {
             const fileInput = document.getElementById('fileInput').files[0];
-            if (!fileInput) return alert("Please select a file.");
+            if (!fileInput) return alert("Select target analytical file first.");
             
             const btn = document.getElementById('uploadBtn');
             const sheetSelect = document.getElementById('sheetSelect');
             
-            if (sheetSelect.style.display === "none") {
-                clearSessionUI();
-            }
-            btn.innerText = "Profiling Data Matrix..."; btn.disabled = true;
+            if (sheetSelect.style.display === "none") { clearSessionUI(); }
+            btn.innerText = "Profiling Frame Matrix..."; btn.disabled = true;
 
             const formData = new FormData();
             formData.append("file", fileInput);
@@ -215,7 +249,7 @@
                         sheetSelect.appendChild(opt);
                     });
                     sheetSelect.style.display = "inline-block";
-                    btn.innerText = "Confirm Sheet & Profile";
+                    btn.innerText = "Confirm Sheet Selection";
                     btn.disabled = false;
                     return;
                 }
@@ -223,23 +257,10 @@
                 if(data.error) throw new Error(data.error);
                 currentSessionId = data.session_id;
 
-                document.getElementById('metricsGrid').style.display = 'grid';
-                document.getElementById('m-rows').innerText = data.metrics.rows;
-                document.getElementById('m-cols').innerText = data.metrics.columns;
-                document.getElementById('m-missing').innerText = data.metrics.missing_cells;
-                document.getElementById('m-dupes').innerText = data.metrics.duplicate_rows;
-                document.getElementById('m-num').innerText = data.metrics.numeric_features;
-                document.getElementById('m-mem').innerText = data.metrics.memory_usage;
+                // FIXED: Populate local analysis dashboard grids with true computed data matrices
+                populateInsightsDashboard(data.stats, data.columns);
 
-                document.getElementById('tableContainer').style.display = 'block';
-                let hHTML = '<tr>'; data.columns.forEach(c => hHTML += `<th>${c}</th>`); hHTML += '</tr>';
-                document.getElementById('tableHead').innerHTML = hHTML;
-
-                let bHTML = '';
-                data.preview.forEach(row => { bHTML += '<tr>'; data.columns.forEach(c => bHTML += `<td>${row[c]}</td>`); bHTML += '</tr>'; });
-                document.getElementById('tableBody').innerHTML = bHTML;
-
-                btn.innerText = "Data Ingested ✅";
+                btn.innerText = "Ingestion Complete ✅";
                 document.getElementById('nav-builder').classList.remove('locked');
                 document.getElementById("chatInput").disabled = false;
                 document.getElementById("sendBtn").disabled = false;
@@ -249,9 +270,80 @@
                 initWebSocket(currentSessionId);
 
             } catch (err) {
-                alert("Upload failed: " + err.message);
+                alert("Profiling failed: " + err.message);
                 btn.innerText = "Upload & Profile"; btn.disabled = false;
             }
+        }
+
+        function populateInsightsDashboard(stats, columns) {
+            const tbody = document.getElementById("statsTableBody");
+            tbody.innerHTML = "";
+            stats.forEach(s => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td><strong>${s.column}</strong></td>
+                    <td><span class="type-badge">${s.type}</span></td>
+                    <td>${s.missing}</td>
+                    <td>${s.unique}</td>
+                    <td>${s.mean}</td>
+                    <td>${s.median}</td>
+                    <td>${s.mode}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+            
+            const labCol = document.getElementById("labColSelect");
+            labCol.innerHTML = "";
+            columns.forEach(c => {
+                const opt = document.createElement("option");
+                opt.value = c; opt.innerText = c;
+                labCol.appendChild(opt);
+            });
+            
+            document.getElementById("analyticsDashboard").style.display = "grid";
+        }
+
+        async function executePipelineClean(action) {
+            if (!currentSessionId) return;
+            showThinkingAnimation("Applying workspace mutations");
+            
+            const formData = new FormData();
+            formData.append("session_id", currentSessionId);
+            formData.append("action", action);
+            
+            try {
+                const response = await fetch("/api/clean", { method: "POST", body: formData });
+                const data = await response.json();
+                if (data.success) {
+                    // Refresh data table matrix metrics
+                    const colNames = Array.from(document.getElementById("labColSelect").options).map(o => o.value);
+                    populateInsightsDashboard(data.stats, colNames);
+                    appendMessage("ai-msg", `⚙️ **Clean Pipeline Triggered:** Matrix elements modified via \`${action}\`. Rows remaining: ${data.rows}. Core presentation context state updated.`);
+                }
+            } catch (e) { alert("Cleaning operation failed."); }
+            removeThinkingAnimation();
+        }
+
+        async function renderLabVisualization() {
+            if(!currentSessionId) return;
+            const col = document.getElementById("labColSelect").value;
+            const type = document.getElementById("labPlotType").value;
+            
+            const formData = new FormData();
+            formData.append("session_id", currentSessionId);
+            formData.append("column", col);
+            formData.append("plot_type", type);
+            
+            try {
+                const response = await fetch("/api/plot_lab", { method: "POST", body: formData });
+                const data = await response.json();
+                if (data.success && data.chart_img) {
+                    document.getElementById("labPlaceholderText").style.display = "none";
+                    const img = document.getElementById("labPreviewImage");
+                    img.src = "data:image/png;base64," + data.chart_img;
+                    img.style.display = "block";
+                }
+            } catch(e) { alert("Plot parsing variance error."); }
         }
 
         function initWebSocket(sessionId) {
@@ -259,7 +351,6 @@
             ws = new WebSocket(`${protocol}//${window.location.host}/ws/chat/${sessionId}`);
             ws.onmessage = function(event) {
                 removeThinkingAnimation();
-
                 const data = JSON.parse(event.data);
                 if (data.type === "message") {
                     appendMessage("ai-msg", data.content);
@@ -270,11 +361,6 @@
                     if (data.chart_img) {
                         document.getElementById("previewImage").src = "data:image/png;base64," + data.chart_img;
                         document.getElementById("chartCard").style.display = "flex";
-                    }
-                    if (data.content.includes("Session Reset")) {
-                        document.getElementById('blueprintDeskCard').style.display = "none";
-                        document.getElementById('chartCard').style.display = "none";
-                        document.getElementById('downloadBtn').style.display = "none";
                     }
                 } else if (data.type === "ready") {
                     document.getElementById("downloadBtn").style.display = "flex";
@@ -298,7 +384,7 @@
                 let frameworkBadge = "";
                 let layoutSpecificHTML = "";
                 
-                // FIXED: Escaped backtick/quote strings securely to protect page executions
+                // FIXED ESCAPES: Wrapped structural blueprints text within safe literals mapping structures securely
                 if (slide.layout_type === "variance_analysis") {
                     frameworkBadge = '<div class="framework-badge">📈 VARIANCE ANALYSIS ACTIVE</div>';
                     let rowsHTML = "<tr><th>Metric</th><th>Target</th><th>Actual</th><th>Var</th><th>%</th></tr>";
@@ -310,7 +396,7 @@
                 else if (slide.layout_type === "root_cause") {
                     frameworkBadge = '<div class="framework-badge">🔍 ROOT CAUSE (5-WHYS) ACTIVE</div>';
                     layoutSpecificHTML = `
-                        <div style="font-size:11px; padding:6px; background:white; border:1px solid #cbd5e1; border-radius:4px;">
+                        <div style="font-size:11px; padding:6px; background:white; border:1px solid #cbd5e1; border-radius:4px; color:#334155;">
                             <strong>Symptom:</strong> ${slide.root_cause_data.symptom}<br>
                             <strong>Vectors:</strong> ${slide.root_cause_data.contributing_factors.join(" | ")}<br>
                             <strong>Remediation:</strong> ${slide.root_cause_data.remediation}
@@ -357,10 +443,7 @@
             const bulletsValue = (bulletsElem && bulletsElem.value) ? bulletsElem.value.split("\n").filter(b => b.trim() !== "") : [];
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({
-                    type: "direct_edit",
-                    slide_index: sIdx,
-                    title: titleValue,
-                    bullet_points: bulletsValue
+                    type: "direct_edit", slide_index: sIdx, title: titleValue, bullet_points: bulletsValue
                 }));
             }
         }
@@ -378,7 +461,6 @@
             if (!text || !ws) return;
             
             appendMessage("user-msg", text);
-            
             let actionLabel = "Thinking";
             if (text.toLowerCase().includes("compile") || text.toLowerCase().includes("approve")) {
                 actionLabel = "Compiling widescreen PowerPoint elements";
