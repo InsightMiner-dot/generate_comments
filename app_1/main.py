@@ -7,7 +7,6 @@ from fastapi import FastAPI, UploadFile, File, WebSocket, WebSocketDisconnect, F
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.messages import AIMessage
 
 load_dotenv()
 from agent import app_engine, llm, SlideContent, generate_chart_img_base64
@@ -78,7 +77,6 @@ async def chat_websocket(websocket: WebSocket, session_id: str):
             current_state = app_engine.get_state(config).values
             slides = list(current_state.get("draft_slides", []))
             
-            # ROUTING VECTOR 1: Direct structural manual edit request
             if payload.get("type") == "direct_edit":
                 target_idx = payload.get("slide_index")
                 for s in slides:
@@ -90,37 +88,29 @@ async def chat_websocket(websocket: WebSocket, session_id: str):
                 await websocket.send_json({"type": "message", "content": f"📝 **Slide {target_idx} manual changes saved to state.**", "suggestions": ["Approve Plan & Compile"], "draft_slides": slides})
                 continue
 
-            # ROUTING VECTOR 2: PER-PAGE CONTENT REGENERATION ATTACHMENT HOOK
             elif payload.get("type") == "regenerate_slide":
                 target_idx = payload.get("slide_index")
-                
                 regen_prompt = f"""
-                You are an advanced slide content localized re-generation micro-agent.
-                Regenerate a data-rich version of Slide Index {target_idx} based on this context data profile:
-                {current_state.get('data_summary')}
-                
-                Target Persona Requirements: {current_state.get('persona')}
-                Core Operational Scenario: {current_state.get('topics')}
-                
-                Return a data-dense, fully formed slide outline structure for this slide index.
+                You are a granular text re-drafting assistant. Regenerate a high-density slide layout index {target_idx}.
+                Dataset Foundations: {current_state.get('data_summary')}
+                Target Audience Context: {current_state.get('persona')}
+                Core Topic Frame: {current_state.get('topics')}
                 """
                 new_slide_content = llm.with_structured_output(SlideContent).invoke([SystemMessage(content=regen_prompt)])
-                
                 for s in slides:
                     if s.get("slide_index") == target_idx:
                         s["title"] = new_slide_content.title
                         s["bullet_points"] = new_slide_content.bullet_points
+                        s["layout_type"] = new_slide_content.layout_type
+                        s["table_headers"] = new_slide_content.table_headers
+                        s["table_rows"] = new_slide_content.table_rows
                         break
-                        
                 app_engine.update_state(config, {"draft_slides": slides})
                 await websocket.send_json({"type": "message", "content": f"🔄 **Slide {target_idx} successfully contextually re-drafted.**", "suggestions": ["Approve Plan & Compile"], "draft_slides": slides})
                 continue
             
-            # ROUTING VECTOR 3: Standard conversational workflow streaming
             elif payload.get("type") == "chat":
                 user_input = payload.get("content")
-                
-                # Dynamic adjustment tracking to update chart previews during review phases
                 if current_state.get("current_step") == "review_slides" and any(w in user_input.lower() for w in ["graph", "plot", "chart"]):
                     new_b64, _ = generate_chart_img_base64(current_state, user_input)
                     if new_b64:
@@ -131,7 +121,6 @@ async def chat_websocket(websocket: WebSocket, session_id: str):
                         if "messages" in value:
                             bot_response = value["messages"][-1].content
                             suggs = value.get("suggestions", [])
-                            
                             updated_state = app_engine.get_state(config).values
                             draft_slides = updated_state.get("draft_slides", [])
                             chart_b64 = updated_state.get("chart_img_base64", "")
