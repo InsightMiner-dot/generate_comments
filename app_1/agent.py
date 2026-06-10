@@ -29,7 +29,7 @@ llm = AzureChatOpenAI(
     api_version=azure_api_version,
     deployment_name=azure_deployment,
     model=model_name,
-    temperature=0.2
+    temperature=0.1
 )
 
 # --- 2. Data Models & State ---
@@ -38,8 +38,11 @@ class SuggestionList(BaseModel):
 
 class SlideContent(BaseModel):
     slide_index: int = Field(description="Sequential index starting at 1")
-    title: str = Field(description="Slide title capturing a concrete insight or conclusion.")
-    bullet_points: List[str] = Field(description="3-5 impactful bullets containing real data metrics/figures.")
+    title: str = Field(description="Slide title capturing a concrete insight or data finding.")
+    layout_type: str = Field(description="Must be either 'bullet_layout' or 'table_grid'")
+    bullet_points: List[str] = Field(description="3-4 impactful bullets containing real figures.")
+    table_headers: List[str] = Field(default=[], description="Populated ONLY if layout_type is 'table_grid'")
+    table_rows: List[List[str]] = Field(default=[], description="Populated matrix cells matching headers ONLY if layout_type is 'table_grid'")
 
 class PresentationDeck(BaseModel):
     slides: List[SlideContent]
@@ -49,7 +52,7 @@ class ChartSpecification(BaseModel):
     x_column: str = Field(description="Exact column name for X-axis from dataset")
     y_column: str = Field(description="Exact column name for Y-axis")
     chart_type: str = Field(description="'bar', 'line', 'scatter', 'histogram', 'boxplot'")
-    key_takeaways: List[str] = Field(description="3 concrete bullet points explaining what this specific data trend means.")
+    key_takeaways: List[str] = Field(description="3 concrete bullet points explaining what this data trend means.")
 
 class PresentationState(TypedDict):
     messages: Annotated[list, add_messages]
@@ -68,12 +71,13 @@ class PresentationState(TypedDict):
     final_pptx_bytes: bytes
     chart_img_base64: str
 
-# --- Color Palette Constants ---
-NAVY_PRIMARY = (15, 23, 42)     # #0F172A
-BLUE_ACCENT = (37, 99, 235)     # #2563EB
-SLATE_TEXT = (71, 85, 105)     # #475569
+# --- Premium Dark Theme Color Constants ---
+DARK_BG = (15, 23, 42)          # #0F172A - Deep Dark Slate Canvas
+TEXT_LIGHT = (248, 250, 252)    # #F8FAFC - Pure High-Contrast White
+ACCENT_BLUE = (56, 189, 248)    # #38BDF8 - Bright Sky Blue
+MUTED_TEXT = (148, 163, 184)    # #94A3B8 - Readable Gray
 
-def add_styled_text(tf, text, size_pt, bold=False, color_rgb=NAVY_PRIMARY, is_first=False, space_after=12):
+def add_styled_text(tf, text, size_pt, bold=False, color_rgb=TEXT_LIGHT, is_first=False, space_after=12):
     p = tf.paragraphs[0] if is_first else tf.add_paragraph()
     p.text = text
     p.font.name = 'Segoe UI'
@@ -83,27 +87,38 @@ def add_styled_text(tf, text, size_pt, bold=False, color_rgb=NAVY_PRIMARY, is_fi
     p.space_after = Pt(space_after)
     return p
 
+def apply_dark_background(slide):
+    """Draws a solid dark rectangle bounding box to establish a dark canvas theme color backgrounds."""
+    left = top = Inches(0)
+    width = Inches(13.333)
+    height = Inches(7.5)
+    bg_shape = slide.shapes.add_shape(1, left, top, width, height) # 1 maps to Rectangle geometry
+    bg_shape.fill.solid()
+    bg_shape.fill.fore_color.rgb = RGBColor(*DARK_BG)
+    bg_shape.line.fill.background() # Eliminate visible shape boundary lines
+
 # --- Chart Generation Helper ---
 def generate_chart_img_base64(state: PresentationState, graph_request_str: str) -> tuple[str, Any]:
-    """Generates an immediate visualization string from the data matrix state."""
     if not graph_request_str or "no graph" in graph_request_str.lower():
         return "", None
-        
     try:
         graph_prompt = f"Schema: {state['schema_info']}\nUser requested graph: {graph_request_str}\nDetermine chart config."
         chart_spec = llm.with_structured_output(ChartSpecification).invoke([SystemMessage(content=graph_prompt)])
-        
         df = pd.read_json(io.StringIO(state["dataframe_json"]))
-        plt.rcParams['font.family'] = 'sans-serif'
-        plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'Segoe UI']
         
-        fig, ax = plt.subplots(figsize=(7, 4.5), dpi=300)
+        plt.rcParams['font.family'] = 'sans-serif'
+        plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Segoe UI']
+        
+        # Format chart layout styling to fit dark premium look perfectly
+        fig, ax = plt.subplots(figsize=(7, 4.5), dpi=300, facecolor='#0F172A')
+        ax.set_facecolor('#0F172A')
+        
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_color('#cbd5e1')
-        ax.spines['bottom'].set_color('#cbd5e1')
+        ax.spines['left'].set_color('#334155')
+        ax.spines['bottom'].set_color('#334155')
         ax.set_axisbelow(True)
-        ax.yaxis.grid(True, color='#f1f5f9', linestyle='-', linewidth=1)
+        ax.yaxis.grid(True, color='#1E293B', linestyle='-', linewidth=1)
         
         x_col = chart_spec.x_column if chart_spec.x_column in df.columns else df.columns[0]
         y_col = chart_spec.y_column if chart_spec.y_column in df.columns else df.select_dtypes(include=['number']).columns[0]
@@ -113,29 +128,30 @@ def generate_chart_img_base64(state: PresentationState, graph_request_str: str) 
         c_type = chart_spec.chart_type.lower()
         
         if 'histogram' in c_type:
-            ax.hist(df[y_col].dropna(), bins=10, color="#2563eb", edgecolor='white', width=0.8)
+            ax.hist(df[y_col].dropna(), bins=10, color="#38bdf8", edgecolor='#0F172A')
         elif 'boxplot' in c_type:
-            ax.boxplot(sample_df[y_col].dropna(), patch_artist=True, boxprops=dict(facecolor="#eff6ff", color="#2563eb"), medianprops=dict(color="#ef4444"))
+            ax.boxplot(sample_df[y_col].dropna(), patch_artist=True, boxprops=dict(facecolor="#1e293b", color="#38bdf8"), medianprops=dict(color="#ef4444"))
         elif 'scatter' in c_type:
-            ax.scatter(sample_df[x_col], sample_df[y_col], color="#ef4444", s=70, alpha=0.8, edgecolors='white')
+            ax.scatter(sample_df[x_col], sample_df[y_col], color="#ef4444", s=70, alpha=0.9, edgecolors='#f8fafc')
         else:
-            bars = ax.bar(sample_df[x_col], sample_df[y_col], color="#2563eb", width=0.55)
+            bars = ax.bar(sample_df[x_col], sample_df[y_col], color="#38bdf8", width=0.55)
             for bar in bars:
                 yval = bar.get_height()
-                if yval > 0: ax.text(bar.get_x() + bar.get_width()/2, yval + (yval * 0.01), f"{yval:,.0f}", ha='center', va='bottom', fontsize=7, color='#475569')
+                if yval > 0: ax.text(bar.get_x() + bar.get_width()/2, yval + (yval * 0.01), f"{yval:,.0f}", ha='center', va='bottom', fontsize=7, color='#94a3b8')
             
-        ax.set_title(chart_spec.chart_title, fontweight='bold', fontsize=11, pad=15, color="#0F172A", loc='left')
-        plt.xticks(rotation=35, ha='right', fontsize=8, color='#475569')
+        ax.set_title(chart_spec.chart_title, fontweight='bold', fontsize=11, pad=15, color="#F8FAFC", loc='left')
+        ax.tick_params(colors='#94a3b8', labelsize=8)
+        plt.xticks(rotation=35, ha='right')
         plt.tight_layout()
         
         chart_bytes = io.BytesIO()
-        plt.savefig(chart_bytes, format='png', dpi=300, transparent=True)
+        plt.savefig(chart_bytes, format='png', dpi=300, facecolor=fig.get_facecolor(), edgecolor='none')
         chart_bytes.seek(0)
         base64_str = base64.b64encode(chart_bytes.getvalue()).decode('utf-8')
         plt.close()
         return base64_str, chart_spec
     except Exception as e:
-        print(f"Immediate Plot Preview Error: {e}")
+        print(f"Plot Preview Error: {e}")
         return "", None
 
 # --- 3. Graph Nodes ---
@@ -147,63 +163,72 @@ def ingest_and_summarize(state: PresentationState):
         if any(kw in col_lower for kw in ['id', 'code', 'invoice', 'zip', 'phone', 'account', 'serial', 'sl']):
             df[col] = df[col].astype(str)
             
-    profile_summary = []
-    profile_summary.append(f"Total Rows Processed: {len(df)}, Total Schema Fields: {len(df.columns)}")
-    
-    num_cols = df.select_dtypes(include=['number']).columns.tolist()
-    if num_cols:
-        profile_summary.append("\n--- Statistical Distributions (True Math Metrics) ---")
-        profile_summary.append(df[num_cols].describe().to_string())
-        
-    cat_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
-    if cat_cols:
-        profile_summary.append("\n--- Nominal Variables & Identifier Attributes Distributions ---")
-        for col in cat_cols[:5]:
-            profile_summary.append(f"Field '{col}' Frequency Matrix:\n{df[col].value_counts().head(3).to_string()}")
-            
+    profile_summary = [
+        f"Total Rows Processed: {len(df)}, Total Variables: {len(df.columns)}",
+        "\n--- Statistical Summary Framework (Numeric Attributes) ---",
+        df.select_dtypes(include=['number']).describe().to_string()
+    ]
     compiled_profile = "\n".join(profile_summary)
     
-    prompt = f"""
-    You are an elite Business Intelligence Analyst. Review this statistical summary frame.
-    Note that identity variables like Invoice IDs have been filtered out of numerical averages to ensure mathematical accuracy.
-    
-    Data Profile Matrix:
-    {compiled_profile}
-    """
+    prompt = f"Analyze this statistical dataset profile frame and summarize principal metrics/outliers:\n{compiled_profile}"
     response = llm.invoke([SystemMessage(content=prompt)])
     
+    # ADVANCED STEP 1: Route to "data_prep" enabling conversational data transformations
     msg = (f"### 📊 Cleaned Data Profile Analytics\n{response.content}\n\n"
-           "Presentation schema calibrated. **Who is the target audience or persona for this report?**")
+           "**Conversational Transformation Enabled:** You can filter/shape data now (e.g., *'keep rows where cost > 5000'*) or click **Proceed to Target Persona** below.")
     
     return {
         "data_summary": response.content,
-        "current_step": "persona",
-        "suggestions": [
-            "Data Analyst (The Gatekeeper)", 
-            "Financial Analyst (The Monetizer)", 
-            "Marketing Team (The Behavioralist)", 
-            "Executive Board (The Strategist)"
-        ],
+        "current_step": "data_prep",
+        "suggestions": ["Proceed to Target Persona", "Remove missing cells"],
         "messages": [AIMessage(content=msg)]
     }
 
 def process_wizard_step(state: PresentationState):
     step = state.get("current_step")
     user_input = state["messages"][-1].content.strip()
-    schema = state["schema_info"]
     sugg_llm = llm.with_structured_output(SuggestionList)
 
-    if step == "done":
-        if "yes" in user_input.lower() or "restart" in user_input.lower() or "new session" in user_input.lower():
+    if step == "done" and any(w in user_input.lower() for w in ["yes", "restart", "new"]):
+        return {
+            "current_step": "persona", "draft_slides": [], "output_ready": False, "chart_img_base64": "",
+            "suggestions": ["Data Analyst (The Gatekeeper)", "Financial Analyst (The Monetizer)", "Marketing Team (The Behavioralist)", "Executive Board (The Strategist)"],
+            "messages": [AIMessage(content="🔄 **Session Reset!**\n\n**Who is the target audience or persona for this new deck?**")]
+        }
+
+    # ENHANCEMENT 1: CONVERSATIONAL DATA TRANSFORMATION LAYER PROCESSING
+    if step == "data_prep":
+        if "proceed" in user_input.lower() or "persona" in user_input.lower():
             return {
-                "current_step": "persona", "draft_slides": [], "output_ready": False, "chart_img_base64": "",
+                "current_step": "persona",
                 "suggestions": ["Data Analyst (The Gatekeeper)", "Financial Analyst (The Monetizer)", "Marketing Team (The Behavioralist)", "Executive Board (The Strategist)"],
-                "messages": [AIMessage(content="🔄 **Session Reset!** Starting a fresh presentation construction cycle.\n\n**Who is the target audience or persona for this new deck?**")]
+                "messages": [AIMessage(content="Excellent. **Who is the target persona or audience for this presentation deck?**")]
             }
-        return {"messages": [AIMessage(content="Presentation workspace locked. Type **'Restart'** to start over.")]}
+        else:
+            try:
+                df = pd.read_json(io.StringIO(state["dataframe_json"]))
+                code_prompt = f"""Write exactly ONE line of executable python pandas code to transform this dataframe based on: "{user_input}". The variable is 'df'.
+                Columns: {state['schema_info']}
+                Example: df = df[df['Cost'] > 100]"""
+                code_ans = llm.invoke([SystemMessage(content=code_prompt)]).content.strip().replace("`", "")
+                
+                local_env = {"df": df, "pd": pd}
+                exec(code_ans, {}, local_env)
+                transformed_df = local_env["df"]
+                
+                # Re-profile updated structural frame
+                new_summary = transformed_df.select_dtypes(include=['number']).describe().to_string()
+                return {
+                    "dataframe_json": transformed_df.to_json(),
+                    "data_summary": f"Post-Transformation Analytics Snapshot:\n{new_summary}",
+                    "suggestions": ["Proceed to Target Persona"],
+                    "messages": [AIMessage(content=f"⚙️ **Transformation Applied:** `{code_ans}`\nRows Remaining: {len(transformed_df):,}. Click **Proceed to Target Persona** to continue.")]
+                }
+            except Exception as e:
+                return {"suggestions": ["Proceed to Target Persona"], "messages": [AIMessage(content=f"⚠️ Failed to parse transformation instruction: {e}. Please try another query or proceed.")]}
 
     if step == "persona":
-        prompt = f"Given data summary profile:\n{state['data_summary']}\nAnd persona: {user_input}\nSuggest 3 key analytical topics or scenarios."
+        prompt = f"Data Summary Metrics:\n{state['data_summary']}\nPersona Selected: {user_input}\nSuggest 3 context-specific operational topic focus areas."
         topics = sugg_llm.invoke([SystemMessage(content=prompt)]).suggestions
         return {
             "persona": user_input, "current_step": "topics", "suggestions": topics,
@@ -217,7 +242,7 @@ def process_wizard_step(state: PresentationState):
         }
 
     elif step == "pages":
-        prompt = f"Data Summary Context: {state['data_summary']}\nPersona: {state['persona']}\nTopics: {state['topics']}\nSuggest 3 catching, metric-focused Presentation Titles."
+        prompt = f"Context metrics: {state['data_summary']}\nPersona: {state['persona']}\nSuggest 3 data-focused Presentation Main Titles."
         titles = sugg_llm.invoke([SystemMessage(content=prompt)]).suggestions
         return {
             "pages": user_input, "current_step": "title", "suggestions": titles,
@@ -227,15 +252,15 @@ def process_wizard_step(state: PresentationState):
     elif step == "title":
         p_lower = str(state.get("persona", "")).lower()
         if "data analyst" in p_lower:
-            persona_pref = "Prefers: Histograms (distribution), Box Plots (outliers/spread), or Scatter Plots (correlations)."
+            persona_pref = "Data Analyst (The Gatekeeper): Focuses on statistical distributions, data cleanliness, anomalies. Prefers Histograms, Box Plots, Scatter Plots."
         elif "financial" in p_lower:
-            persona_pref = "Prefers: Bar Charts (performance vs budgets), or Dual-Axis Line Charts (cost vs revenue)."
+            persona_pref = "Financial Analyst (The Monetizer): Focuses on cash flows, profit margins, variances vs budgets. Prefers Bar/Line charts."
         elif "marketing" in p_lower:
-            persona_pref = "Prefers: Bar Charts (segment metrics/ROI), or Line Charts (trends over cohorts)."
+            persona_pref = "Marketing Team (The Behavioralist): Focuses on customer behavior segmentation, retention funnels. Prefers Bar/Line graphs."
         else:
-            persona_pref = "Prefers: Simplified Trend Lines (overall growth trajectory), or clean Bar Charts (KPI health aggregates)."
+            persona_pref = "Executive Board (The Strategist): Focuses on high-level macro trajectories, corporate trajectories. Prefers clear line/bar trendlines."
 
-        prompt = f"Dataset Schema: {schema}\nAudience Framework: {state['persona']} -> {persona_pref}\nSuggest 3 contextually precise charts matplotlib can draw."
+        prompt = f"Schema Fields: {state['schema_info']}\nAudience Guidelines: {persona_pref}\nSuggest 3 contextually optimized visualizations matplotlib can draw based on available columns."
         graphs = sugg_llm.invoke([SystemMessage(content=prompt)]).suggestions
         return {
             "title": user_input, "current_step": "graph", "suggestions": graphs + ["No Graph Needed"],
@@ -245,48 +270,53 @@ def process_wizard_step(state: PresentationState):
     elif step == "graph":
         p_lower = str(state.get("persona", "")).lower()
         if "data analyst" in p_lower:
-            audience_guardrail = "AUDIENCE FOCUS: DATA ANALYST (THE GATEKEEPER). Dense statistical parameters, validation metrics, data quality limits, and distributions. Pure data."
+            audience_guardrail = "AUDIENCE: DATA ANALYST (THE GATEKEEPER). Focus heavily on statistical variables, ranges, cleanliness, anomalies, and mathematical structures. Strip away generic corporate padding."
         elif "financial" in p_lower:
-            audience_guardrail = "AUDIENCE FOCUS: FINANCIAL ANALYST (THE MONETIZER). Profit margins, cash flow tracking, budget variances, and fiscal risks."
+            audience_guardrail = "AUDIENCE: FINANCIAL ANALYST (THE MONETIZER). Focus heavily on profit metrics, cost drivers, variances, margins, and budget targets."
         elif "marketing" in p_lower:
-            audience_guardrail = "AUDIENCE FOCUS: MARKETING TEAM (THE BEHAVIORALIST). Behavioral conversions, segment maps, campaign acquisition returns."
+            audience_guardrail = "AUDIENCE: MARKETING TEAM (THE BEHAVIORALIST). Focus heavily on acquisition returns, segmentation matrices, channel optimization, and customer trends."
         else:
-            audience_guardrail = "AUDIENCE FOCUS: EXECUTIVE BOARD (THE STRATEGIST). Macro trajectories, corporate strategic objectives, clear operational health outcomes."
+            audience_guardrail = "AUDIENCE: EXECUTIVE BOARD (THE STRATEGIST). Focus on macro-corporate trajectories, strategic alignment, corporate outcomes, and actionable KPI aggregates."
 
-        # IMMEDIATE GENERATION AND INLINE PREVIEW ENGINES
         chart_b64, _ = generate_chart_img_base64(state, user_input)
 
+        # ENHANCEMENT 3: SUPPORTING BOTH TEXT BULLET AND PYPPTX NATIVE TABLES GRID MODELS
         generation_prompt = f"""
-        You are an expert slide deck content architect. Create a comprehensive presentation blueprint framework outline.
+        You are an elite slide content architect. Create a structured slide deck presentation outline blueprint layout array.
+        
         {audience_guardrail}
-        Data Summary Profile Context: {state['data_summary']}
-        Presentation Blueprint Directives:
-        - Title: {state['title']} | Target Audience: {state['persona']} | Core Objective: {state['topics']} | Total Slide Count: {state['pages']} Slides
+        
+        Data Context Profile: {state['data_summary']}
+        
+        Blueprint Directives:
+        - Title: {state['title']} | Audience: {state['persona']} | Focus: {state['topics']} | Length: {state['pages']} Slides
+        
+        CRITICAL STRUCTURAL RULE: If presenting lists of metric points, use layout_type 'bullet_layout'. If presenting structured datasets, matrices, or row summaries, set layout_type to 'table_grid' and fill table_headers and table_rows matrix arrays with explicit string data fields.
         """
         deck_draft = llm.with_structured_output(PresentationDeck).invoke([SystemMessage(content=generation_prompt)])
         slides_dict = [slide.model_dump() for slide in deck_draft.slides]
         
         msg = ("### 🛠️ Review Slide Deck Plan Blueprint\n"
-               "The proposed layout configuration framework and chart preview have been compiled. "
-               "You can **manually edit or individualize any slide title or bullet points configuration on the right**, "
-               "or click **Approve Plan & Compile** to write the widescreen PowerPoint artifact layout.")
+               "The proposed layout configuration framework has been compiled. "
+               "You can **manually edit any slide title, bullet text, or tables matrix directly on the right panel**, "
+               "or ask me changes here. Click **Approve Plan & Compile** to write the widescreen PowerPoint artifact.")
         
         return {
             "graph_request": user_input, "current_step": "review_slides", "draft_slides": slides_dict, "chart_img_base64": chart_b64,
-            "suggestions": ["Approve Plan & Compile", "Make headings punchier", "Add more data insights"],
-            "messages": [AIMessage(content=msg)]
+            "suggestions": ["Approve Plan & Compile", "Make headings punchier"], "messages": [AIMessage(content=msg)]
         }
 
     elif step == "review_slides":
         if "approve" in user_input.lower() or "compile" in user_input.lower():
-            return {"current_step": "generating", "suggestions": [], "messages": [AIMessage(content="⚙️ Compilation approved. Compiling final widescreen assets...")]}
+            return {
+                "current_step": "generating", "suggestions": [], 
+                "messages": [AIMessage(content="⚙️ Compilation approved. Running multi-agent auditing gates and drawing final elements...")]
+            }
         else:
-            edit_prompt = f"""
-            Modify this existing slide blueprint layout matching instructions.
-            Data Profile: {state['data_summary']}
+            edit_prompt = f"""Modify this existing slide blueprint layout matching instructions.
+            Data Profile Context: {state['data_summary']}
             Current Slide Structure Layout: {json.dumps(state.get('draft_slides', []))}
-            User Mutation Command: "{user_input}"
-            """
+            User Mutation Command: "{user_input}" """
             updated_deck = llm.with_structured_output(PresentationDeck).invoke([SystemMessage(content=edit_prompt)])
             slides_dict = [slide.model_dump() for slide in updated_deck.slides]
             return {
@@ -295,10 +325,22 @@ def process_wizard_step(state: PresentationState):
             }
 
 def generate_presentation(state: PresentationState):
-    """Final Step: Generates the widescreen corporate PPTX file stream."""
+    # ENHANCEMENT 2: MULTI-AGENT AUTOMATED QUALITY CONTROL (QC) DATA AUDITING GUARDRAILS
+    slides_list = list(state.get("draft_slides", []))
+    audit_prompt = f"""
+    You are a meticulous Multi-Agent Data Compliance Inspector. Cross-examine the text inside this slide blueprint against the true dataset statistics.
+    Slide Blueprint Blueprint Frame: {json.dumps(slides_list)}
+    True Dataset Statistics Snapshot: {state['data_summary']}
+    
+    If any calculation, total, percentage, or milestone listed on the slides does not match the true summary data, you MUST modify the slide title or bullet points to correct the numbers. Ensure 100% numerical validation.
+    """
+    audited_deck = llm.with_structured_output(PresentationDeck).invoke([SystemMessage(content=audit_prompt)])
+    validated_slides = [slide.model_dump() for slide in audited_deck.slides]
+
     chart_b64, chart_spec = generate_chart_img_base64(state, state["graph_request"])
     chart_bytes = io.BytesIO(base64.b64decode(chart_b64)) if chart_b64 else None
 
+    # PowerPoint Compiler Initialization
     prs = Presentation()
     prs.slide_width = Inches(13.333)
     prs.slide_height = Inches(7.5)
@@ -306,42 +348,76 @@ def generate_presentation(state: PresentationState):
 
     # --- Slide 1: Title Slide ---
     slide = prs.slides.add_slide(blank_layout)
+    apply_dark_background(slide)
     tx_box = slide.shapes.add_textbox(Inches(1.0), Inches(2.2), Inches(11.333), Inches(3.5))
     tf = tx_box.text_frame
     tf.word_wrap = True
-    add_styled_text(tf, state.get('title', 'Generated Report'), 44, bold=True, color_rgb=NAVY_PRIMARY, is_first=True, space_after=18)
-    add_styled_text(tf, f"Prepared for Audience: {state.get('persona', 'Enterprise Stakeholders')}", 20, bold=False, color_rgb=BLUE_ACCENT)
+    add_styled_text(tf, state.get('title', 'Generated Report'), 44, bold=True, color_rgb=TEXT_LIGHT, is_first=True, space_after=18)
+    add_styled_text(tf, f"Target Operational Focus: {state.get('persona', 'Enterprise Stakeholders')}", 20, bold=False, color_rgb=ACCENT_BLUE)
 
-    # --- Process Approved Slide Blueprint Content ---
-    for raw_slide in state.get("draft_slides", []):
+    # --- Content Elements Building Grid ---
+    for raw_slide in validated_slides:
         slide = prs.slides.add_slide(blank_layout)
+        apply_dark_background(slide)
+        
         title_box = slide.shapes.add_textbox(Inches(1.0), Inches(0.6), Inches(11.333), Inches(1.0))
         tf_title = title_box.text_frame
         tf_title.word_wrap = True
-        add_styled_text(tf_title, raw_slide.get("title", "Slide"), 32, bold=True, color_rgb=NAVY_PRIMARY, is_first=True)
+        add_styled_text(tf_title, raw_slide.get("title", "Slide"), 32, bold=True, color_rgb=TEXT_LIGHT, is_first=True)
         
-        body_box = slide.shapes.add_textbox(Inches(1.0), Inches(1.8), Inches(11.333), Inches(5.0))
-        tf_body = body_box.text_frame
-        tf_body.word_wrap = True
-        for idx, bullet in enumerate(raw_slide.get("bullet_points", [])):
-            add_styled_text(tf_body, f"•  {bullet}", 16, bold=False, color_rgb=SLATE_TEXT, is_first=(idx == 0), space_after=14)
+        # CHOOSE RENDERING ENGINE TYPE: TEXT BULLETS VS NATIVE PPTX TABLES INJECTION
+        if raw_slide.get("layout_type") == "table_grid" and raw_slide.get("table_headers"):
+            headers = raw_slide["table_headers"]
+            rows = raw_slide["table_rows"]
+            
+            rows_cnt = len(rows) + 1
+            cols_cnt = len(headers)
+            
+            table_shape = slide.shapes.add_table(rows_cnt, cols_cnt, Inches(1.0), Inches(2.0), Inches(11.333), Inches(4.5)).table
+            
+            # Format table headers
+            for c_idx, h_text in enumerate(headers):
+                cell = table_shape.cell(0, c_idx)
+                cell.text = str(h_text)
+                cell.fill.solid()
+                cell.fill.fore_color.rgb = RGBColor(30, 41, 59) # Elevated Dark Header Block
+                cell.text_frame.paragraphs[0].font.color.rgb = RGBColor(*ACCENT_BLUE)
+                cell.text_frame.paragraphs[0].font.bold = True
                 
-    # --- Visual Insight Slide ---
+            # Inject cell value strings
+            for r_idx, row_data in enumerate(rows):
+                for c_idx, cell_val in enumerate(row_data):
+                    if c_idx < cols_cnt:
+                        cell = table_shape.cell(r_idx + 1, c_idx)
+                        cell.text = str(cell_val)
+                        cell.text_frame.paragraphs[0].font.color.rgb = RGBColor(*TEXT_LIGHT)
+                        cell.text_frame.paragraphs[0].font.size = Pt(13)
+        else:
+            # Render classic bullet lists
+            body_box = slide.shapes.add_textbox(Inches(1.0), Inches(1.8), Inches(11.333), Inches(5.0))
+            tf_body = body_box.text_frame
+            tf_body.word_wrap = True
+            for idx, bullet in enumerate(raw_slide.get("bullet_points", [])):
+                add_styled_text(tf_body, f"•  {bullet}", 16, bold=False, color_rgb=MUTED_TEXT, is_first=(idx == 0), space_after=14)
+                
+    # --- Slide Final: Side-By-Side Visual Insights Slide ---
     if chart_bytes and chart_spec:
         slide = prs.slides.add_slide(blank_layout)
+        apply_dark_background(slide)
+        
         title_box = slide.shapes.add_textbox(Inches(1.0), Inches(0.6), Inches(11.333), Inches(1.0))
         tf_title = title_box.text_frame
         tf_title.word_wrap = True
-        add_styled_text(tf_title, chart_spec.chart_title, 32, bold=True, color_rgb=NAVY_PRIMARY, is_first=True)
+        add_styled_text(tf_title, chart_spec.chart_title, 32, bold=True, color_rgb=TEXT_LIGHT, is_first=True)
         
         slide.shapes.add_picture(chart_bytes, Inches(0.6), Inches(1.8), width=Inches(6.8))
+        
         explanation_box = slide.shapes.add_textbox(Inches(7.8), Inches(1.8), Inches(4.8), Inches(4.8))
         tf_explain = explanation_box.text_frame
         tf_explain.word_wrap = True
-        
-        add_styled_text(tf_explain, "Analytical Takeaways", 20, bold=True, color_rgb=BLUE_ACCENT, is_first=True, space_after=14)
+        add_styled_text(tf_explain, "Analytical Takeaways", 20, bold=True, color_rgb=ACCENT_BLUE, is_first=True, space_after=14)
         for insight in chart_spec.key_takeaways:
-            add_styled_text(tf_explain, f"• {insight}", 15, bold=False, color_rgb=SLATE_TEXT, is_first=False, space_after=12)
+            add_styled_text(tf_explain, f"• {insight}", 15, bold=False, color_rgb=MUTED_TEXT, is_first=False, space_after=12)
         
     output_stream = io.BytesIO()
     prs.save(output_stream)
@@ -349,7 +425,7 @@ def generate_presentation(state: PresentationState):
     return {
         "output_ready": True, "current_step": "done", "final_pptx_bytes": output_stream.getvalue(),
         "suggestions": ["Yes, Start New Session"],
-        "messages": [AIMessage(content="🎉 **Success!** Your finalized presentation layout is fully built and ready for download.")]
+        "messages": [AIMessage(content="🎉 **Success!** Your presentation has been verified by multi-agent audit routines and generated inside our widescreen Executive Dark layout scheme.")]
     }
 
 def start_router(state: PresentationState):
