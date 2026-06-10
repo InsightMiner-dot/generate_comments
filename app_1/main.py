@@ -23,21 +23,17 @@ async def upload_data(file: UploadFile = File(...), sheet_name: str = Form(None)
     contents = await file.read()
     file_bytes = io.BytesIO(contents)
     
-    # Check for multi-sheet workbooks
     if file.filename.endswith(('.xlsx', '.xls')):
         xl = pd.ExcelFile(file_bytes)
         if len(xl.sheet_names) > 1 and not sheet_name:
-            return {
-                "requires_sheet_selection": True,
-                "sheets": xl.sheet_names
-            }
+            return {"requires_sheet_selection": True, "sheets": xl.sheet_names}
         df = pd.read_excel(file_bytes, sheet_name=sheet_name if sheet_name else xl.sheet_names[0])
     else:
         df = pd.read_csv(file_bytes)
         
     session_id = str(uuid.uuid4())
     
-    # Pre-clean ID columns on the metrics engine to secure qualitative analytics alignment
+    # Pre-clean IDs to protect profiling metrics
     for col in df.columns:
         col_lower = str(col).lower()
         if any(kw in col_lower for kw in ['id', 'code', 'invoice', 'zip', 'phone', 'serial', 'sl']):
@@ -84,27 +80,55 @@ async def chat_websocket(websocket: WebSocket, session_id: str):
     config = {"configurable": {"thread_id": session_id}}
     try:
         while True:
-            user_input = await websocket.receive_text()
-            for event in app_engine.stream({"messages": [HumanMessage(content=user_input)]}, config):
-                for value in event.values():
-                    if "messages" in value:
-                        bot_response = value["messages"][-1].content
-                        suggs = value.get("suggestions", [])
-                        
-                        current_state = app_engine.get_state(config).values
-                        draft_slides = current_state.get("draft_slides", [])
-                        
-                        await websocket.send_json({
-                            "type": "message", 
-                            "content": bot_response, 
-                            "suggestions": suggs,
-                            "draft_slides": draft_slides
-                        })
-                        
-            state = app_engine.get_state(config).values
-            if state.get("output_ready"):
-                chart_base64 = state.get("chart_img_base64", "")
-                await websocket.send_json({"type": "ready", "chart_img": chart_base64})
+            # Parse structured packet payloads
+            payload = await websocket.receive_json()
+            
+            # ROUTING VECTOR 1: Direct structural state blueprint update request
+            if payload.get("type") == "direct_edit":
+                current_state = app_engine.get_state(config).values
+                slides = list(current_state.get("draft_slides", []))
+                target_idx = payload.get("slide_index")
+                
+                for s in slides:
+                    if s.get("slide_index") == target_idx:
+                        s["title"] = payload.get("title")
+                        s["bullet_points"] = payload.get("bullet_points")
+                        break
+                
+                # Push direct manual sync straight to current checkpoint memory
+                app_engine.update_state(config, {"draft_slides": slides})
+                
+                await websocket.send_json({
+                    "type": "message",
+                    "content": f"✨ **Slide {target_idx} updated manually.** Modifications are synchronized with the state machine checkpoint.",
+                    "suggestions": ["Approve Plan & Compile"],
+                    "draft_slides": slides
+                })
+                continue
+            
+            # ROUTING VECTOR 2: Standard natural language conversational request
+            elif payload.get("type") == "chat":
+                user_input = payload.get("content")
+                for event in app_engine.stream({"messages": [HumanMessage(content=user_input)]}, config):
+                    for value in event.values():
+                        if "messages" in value:
+                            bot_response = value["messages"][-1].content
+                            suggs = value.get("suggestions", [])
+                            
+                            current_state = app_engine.get_state(config).values
+                            draft_slides = current_state.get("draft_slides", [])
+                            
+                            await websocket.send_json({
+                                "type": "message", 
+                                "content": bot_response, 
+                                "suggestions": suggs,
+                                "draft_slides": draft_slides
+                            })
+                            
+                state = app_engine.get_state(config).values
+                if state.get("output_ready"):
+                    chart_base64 = state.get("chart_img_base64", "")
+                    await websocket.send_json({"type": "ready", "chart_img": chart_base64})
     except WebSocketDisconnect: pass
 
 @app.get("/api/download/{session_id}")
