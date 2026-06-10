@@ -6,97 +6,65 @@
     <title>Enterprise Insights Engine</title>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
-        /* --- Enterprise Design System --- */
-        :root {
-            --bg-dark: #09090b;        
-            --bg-main: #ffffff;        
-            --surface: #f4f4f5;        
-            --border: #e4e4e7;
-            --text-main: #09090b;
-            --text-muted: #71717a;
-            --accent: #18181b;         
-            --accent-hover: #27272a;
-            --primary: #2563eb;
-            --danger: #ef4444;
-            --font-xs: 12px;
-            --font-sm: 13px;
-            --font-md: 14px;
-        }
-
+        :root { --bg-dark: #09090b; --bg-main: #ffffff; --surface: #f4f4f5; --border: #e4e4e7; --text-main: #09090b; --text-muted: #71717a; --accent: #18181b; --primary: #2563eb; --danger: #ef4444; --font-xs: 12px; --font-sm: 13px; --font-md: 14px; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-size: var(--font-sm); color: var(--text-main); background: var(--bg-main); display: flex; height: 100vh; overflow: hidden; }
+        body { font-family: ui-sans-serif, system-ui, sans-serif; font-size: var(--font-sm); color: var(--text-main); background: var(--bg-main); display: flex; height: 100vh; overflow: hidden; }
 
-        /* --- Sidebar Navigation --- */
+        /* Sidebar & Layout */
         .sidebar { width: 240px; background: var(--bg-dark); color: #a1a1aa; display: flex; flex-direction: column; border-right: 1px solid #27272a; }
         .brand { padding: 20px; font-weight: 600; font-size: var(--font-md); color: white; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #27272a; }
-        .nav-items { padding: 15px 0; flex: 1; display: flex; flex-direction: column; gap: 5px; }
-        .nav-item { padding: 8px 20px; cursor: pointer; font-size: var(--font-sm); font-weight: 500; transition: 0.2s; border-left: 2px solid transparent; }
+        .nav-items { padding: 15px 0; flex: 1; }
+        .nav-item { padding: 8px 20px; cursor: pointer; font-weight: 500; transition: 0.2s; border-left: 2px solid transparent; }
         .nav-item:hover { color: white; }
         .nav-item.active { background: #18181b; color: white; border-left-color: var(--primary); }
         .nav-item.locked { opacity: 0.4; cursor: not-allowed; }
-
-        /* --- Main Content Area --- */
-        .main-view { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--bg-main); }
-        .header { height: 55px; border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 24px; font-weight: 600; font-size: var(--font-md); background: white; }
-        
+        .main-view { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .header { height: 55px; border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 24px; font-weight: 600; background: white; }
         .content { flex: 1; overflow-y: auto; padding: 24px; display: none; flex-direction: column; gap: 24px; }
         .content.active { display: flex; }
 
-        /* --- UI Components --- */
-        .btn { padding: 8px 16px; border-radius: 6px; font-size: var(--font-sm); font-weight: 500; cursor: pointer; transition: 0.15s; border: 1px solid transparent; }
-        .btn-outline { background: white; border-color: var(--border); color: var(--text-main); }
-        .btn-outline:hover:not(:disabled) { background: var(--surface); }
+        /* Buttons & Tab 1 */
+        .btn { padding: 8px 16px; border-radius: 6px; font-size: var(--font-sm); font-weight: 500; cursor: pointer; border: 1px solid transparent; }
         .btn-primary { background: var(--accent); color: white; }
-        .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+        .btn-primary:hover:not(:disabled) { background: #27272a; }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-        /* --- Tab 1: Data Hub --- */
         .upload-panel { display: flex; align-items: center; gap: 15px; padding: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
-        input[type="file"] { font-size: var(--font-sm); color: var(--text-muted); }
-        
         .metrics-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; display: none; }
         .metric-card { padding: 16px; border: 1px solid var(--border); border-radius: 8px; background: white; }
-        .metric-label { font-size: var(--font-xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
-        .metric-value { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; }
-        .metric-value.warning { color: var(--danger); }
-
+        .metric-label { font-size: var(--font-xs); color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; }
+        .metric-value { font-size: 24px; font-weight: 600; }
         .table-container { border: 1px solid var(--border); border-radius: 8px; overflow: auto; display: none; height: calc(100vh - 280px); }
         table { width: 100%; border-collapse: collapse; text-align: left; font-size: var(--font-xs); white-space: nowrap; }
         th, td { padding: 10px 16px; border-bottom: 1px solid var(--border); }
-        th { background: #fafafa; font-weight: 500; color: var(--text-muted); position: sticky; top: 0; border-bottom: 2px solid var(--border); z-index: 10; }
-        tr:hover { background: #fafafa; }
+        th { background: #fafafa; position: sticky; top: 0; border-bottom: 2px solid var(--border); }
 
-        /* --- Tab 2: Presentation Builder (Dense Chat) --- */
+        /* Tab 2: Chat & Suggestions */
         .chat-container { flex: 1; border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; background: white; overflow: hidden; }
         .chat-history { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+        .message { padding: 12px 16px; border-radius: 6px; max-width: 85%; line-height: 1.5; }
+        .ai-msg { align-self: flex-start; background: #f8fafc; border-left: 3px solid var(--primary); }
+        .user-msg { align-self: flex-end; background: var(--surface); border: 1px solid var(--border); }
         
-        .message { padding: 12px 16px; border-radius: 6px; max-width: 85%; font-size: var(--font-sm); line-height: 1.5; }
-        .message p { margin-bottom: 8px; } .message p:last-child { margin-bottom: 0; }
-        .ai-msg { align-self: flex-start; background: #f8fafc; border-left: 3px solid var(--primary); color: var(--text-main); }
-        .user-msg { align-self: flex-end; background: var(--surface); border: 1px solid var(--border); color: var(--text-main); }
+        .suggestions-bar { padding: 10px 24px; background: #fafafa; border-top: 1px solid var(--border); display: flex; gap: 8px; overflow-x: auto; }
+        .suggestion-chip { padding: 6px 12px; background: white; border: 1px solid var(--border); border-radius: 16px; font-size: var(--font-xs); cursor: pointer; white-space: nowrap; transition: 0.2s; color: var(--primary); font-weight: 500; }
+        .suggestion-chip:hover { border-color: var(--primary); background: #eff6ff; }
 
         .chat-input-area { padding: 16px 24px; background: white; border-top: 1px solid var(--border); display: flex; gap: 12px; align-items: center; }
-        input[type="text"] { flex: 1; padding: 10px 16px; border: 1px solid var(--border); border-radius: 6px; font-size: var(--font-sm); outline: none; }
+        input[type="text"] { flex: 1; padding: 10px 16px; border: 1px solid var(--border); border-radius: 6px; outline: none; }
         input[type="text"]:focus { border-color: var(--primary); }
-
         #downloadBtn { display: none; width: 100%; justify-content: center; margin-top: 10px; background: #10b981; }
-        #downloadBtn:hover { background: #059669; }
     </style>
 </head>
 <body>
 
     <div class="sidebar">
-        <div class="brand">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
-            Insights Engine
-        </div>
+        <div class="brand">Data Engine</div>
         <div class="nav-items">
             <div class="nav-item active" id="nav-home" onclick="switchTab('home')">1. Data Quality Hub</div>
             <div class="nav-item locked" id="nav-builder" onclick="switchTab('builder')">2. Presentation Builder</div>
         </div>
-        
         <div style="padding: 20px;">
-            <button class="btn btn-primary" id="downloadBtn" onclick="triggerDownload()">📥 Download Deck .PPTX</button>
+            <button class="btn btn-primary" id="downloadBtn" onclick="triggerDownload()">📥 Download .PPTX</button>
         </div>
     </div>
 
@@ -108,7 +76,6 @@
                 <input type="file" id="fileInput" accept=".csv, .xlsx">
                 <button class="btn btn-primary" id="uploadBtn" onclick="processUpload()">Upload & Profile</button>
             </div>
-
             <div class="metrics-grid" id="metricsGrid">
                 <div class="metric-card"><div class="metric-label">Total Rows</div><div class="metric-value" id="m-rows">-</div></div>
                 <div class="metric-card"><div class="metric-label">Total Columns</div><div class="metric-value" id="m-cols">-</div></div>
@@ -117,22 +84,20 @@
                 <div class="metric-card"><div class="metric-label">Numeric Features</div><div class="metric-value" id="m-num">-</div></div>
                 <div class="metric-card"><div class="metric-label">Memory Usage</div><div class="metric-value" id="m-mem">-</div></div>
             </div>
-
             <div class="table-container" id="tableContainer">
-                <table>
-                    <thead id="tableHead"></thead>
-                    <tbody id="tableBody"></tbody>
-                </table>
+                <table><thead id="tableHead"></thead><tbody id="tableBody"></tbody></table>
             </div>
         </div>
 
         <div id="view-builder" class="content">
             <div class="chat-container">
-                <div class="chat-history" id="chatHistory">
-                    </div>
+                <div class="chat-history" id="chatHistory"></div>
+                
+                <div class="suggestions-bar" id="suggestionsBar" style="display: none;"></div>
+                
                 <div class="chat-input-area">
-                    <input type="text" id="chatInput" placeholder="Type your response to the assistant..." onkeypress="handleEnter(event)" disabled>
-                    <button class="btn btn-primary" id="sendBtn" onclick="sendChatMessage()" disabled>Send Message</button>
+                    <input type="text" id="chatInput" placeholder="Type or select a suggestion..." onkeypress="handleEnter(event)" disabled>
+                    <button class="btn btn-primary" id="sendBtn" onclick="sendChatMessage()" disabled>Send</button>
                 </div>
             </div>
         </div>
@@ -142,27 +107,21 @@
         let ws;
         let currentSessionId = null;
 
-        // UI Routing
         function switchTab(tabId) {
-            const builderNav = document.getElementById('nav-builder');
-            if (tabId === 'builder' && builderNav.classList.contains('locked')) return;
-
+            if (tabId === 'builder' && document.getElementById('nav-builder').classList.contains('locked')) return;
             document.querySelectorAll('.content').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-
             document.getElementById(`view-${tabId}`).classList.add('active');
             document.getElementById(`nav-${tabId}`).classList.add('active');
             document.getElementById('headerTitle').innerText = tabId === 'home' ? 'Data Quality Hub' : 'Presentation Builder';
         }
 
-        // --- Step 1: Upload & Profiling ---
         async function processUpload() {
             const fileInput = document.getElementById('fileInput').files[0];
-            if (!fileInput) return alert("Please select a valid CSV or XLSX file.");
-
+            if (!fileInput) return alert("Please select a file.");
+            
             const btn = document.getElementById('uploadBtn');
-            btn.innerText = "Profiling...";
-            btn.disabled = true;
+            btn.innerText = "Profiling..."; btn.disabled = true;
 
             const formData = new FormData();
             formData.append("file", fileInput);
@@ -170,82 +129,85 @@
             try {
                 const response = await fetch("/api/upload", { method: "POST", body: formData });
                 const data = await response.json();
-
                 if(data.error) throw new Error(data.error);
 
                 currentSessionId = data.session_id;
 
-                // Render Metrics
                 document.getElementById('metricsGrid').style.display = 'grid';
                 document.getElementById('m-rows').innerText = data.metrics.rows;
                 document.getElementById('m-cols').innerText = data.metrics.columns;
-                
-                const mCell = document.getElementById('m-missing');
-                mCell.innerText = data.metrics.missing_cells;
-                if(data.metrics.missing_cells > 0) mCell.classList.add('warning');
-
-                const mDupe = document.getElementById('m-dupes');
-                mDupe.innerText = data.metrics.duplicate_rows;
-                if(data.metrics.duplicate_rows > 0) mDupe.classList.add('warning');
-
+                document.getElementById('m-missing').innerText = data.metrics.missing_cells;
+                document.getElementById('m-dupes').innerText = data.metrics.duplicate_rows;
                 document.getElementById('m-num').innerText = data.metrics.numeric_features;
                 document.getElementById('m-mem').innerText = data.metrics.memory_usage;
 
-                // Render Data Table Preview
                 document.getElementById('tableContainer').style.display = 'block';
-                const thead = document.getElementById('tableHead');
-                const tbody = document.getElementById('tableBody');
-                
                 let hHTML = '<tr>'; data.columns.forEach(c => hHTML += `<th>${c}</th>`); hHTML += '</tr>';
-                thead.innerHTML = hHTML;
+                document.getElementById('tableHead').innerHTML = hHTML;
 
                 let bHTML = '';
-                data.preview.forEach(row => {
-                    bHTML += '<tr>'; data.columns.forEach(c => bHTML += `<td>${row[c]}</td>`); bHTML += '</tr>';
-                });
-                tbody.innerHTML = bHTML;
+                data.preview.forEach(row => { bHTML += '<tr>'; data.columns.forEach(c => bHTML += `<td>${row[c]}</td>`); bHTML += '</tr>'; });
+                document.getElementById('tableBody').innerHTML = bHTML;
 
-                // Unlock Tab 2 and Initialize Chat
                 btn.innerText = "Data Ingested ✅";
-                const builderNav = document.getElementById('nav-builder');
-                builderNav.classList.remove('locked');
-                
+                document.getElementById('nav-builder').classList.remove('locked');
                 document.getElementById("chatInput").disabled = false;
                 document.getElementById("sendBtn").disabled = false;
                 
                 appendMessage("ai-msg", data.initial_message);
+                renderSuggestions(data.suggestions);
                 initWebSocket(currentSessionId);
 
             } catch (err) {
                 alert("Upload failed: " + err.message);
-                btn.innerText = "Upload & Profile";
-                btn.disabled = false;
+                btn.innerText = "Upload & Profile"; btn.disabled = false;
             }
         }
 
-        // --- Step 2: LangGraph Chat WebSocket ---
         function initWebSocket(sessionId) {
             const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
             ws = new WebSocket(`${protocol}//${window.location.host}/ws/chat/${sessionId}`);
-            
             ws.onmessage = function(event) {
                 const data = JSON.parse(event.data);
                 if (data.type === "message") {
                     appendMessage("ai-msg", data.content);
+                    renderSuggestions(data.suggestions || []);
                 } else if (data.type === "ready") {
                     document.getElementById("downloadBtn").style.display = "flex";
+                    document.getElementById("suggestionsBar").style.display = "none";
                 }
             };
+        }
+
+        function renderSuggestions(suggestions) {
+            const bar = document.getElementById("suggestionsBar");
+            bar.innerHTML = "";
+            if (!suggestions || suggestions.length === 0) {
+                bar.style.display = "none";
+                return;
+            }
+            
+            bar.style.display = "flex";
+            suggestions.forEach(text => {
+                const chip = document.createElement("div");
+                chip.className = "suggestion-chip";
+                chip.innerText = text;
+                chip.onclick = () => {
+                    document.getElementById("chatInput").value = text;
+                    sendChatMessage();
+                };
+                bar.appendChild(chip);
+            });
         }
 
         function sendChatMessage() {
             const input = document.getElementById("chatInput");
             const text = input.value.trim();
             if (!text || !ws) return;
-
             appendMessage("user-msg", text);
             ws.send(text);
             input.value = "";
+            document.getElementById("suggestionsBar").style.display = "none";
         }
 
         function handleEnter(e) { if (e.key === 'Enter') sendChatMessage(); }
@@ -254,17 +216,12 @@
             const history = document.getElementById("chatHistory");
             const div = document.createElement("div");
             div.className = `message ${className}`;
-            
-            // Render markdown natively
             div.innerHTML = className === "ai-msg" ? marked.parse(text) : text;
-            
             history.appendChild(div);
             history.scrollTop = history.scrollHeight;
         }
 
-        function triggerDownload() {
-            if (currentSessionId) window.location.href = `/api/download/${currentSessionId}`;
-        }
+        function triggerDownload() { if (currentSessionId) window.location.href = `/api/download/${currentSessionId}`; }
     </script>
 </body>
 </html>
