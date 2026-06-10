@@ -75,7 +75,8 @@ async def chat_websocket(websocket: WebSocket, session_id: str):
                         
             state = app_engine.get_state(config).values
             if state.get("output_ready"):
-                await websocket.send_json({"type": "ready"})
+                chart_base64 = state.get("chart_img_base64", "")
+                await websocket.send_json({"type": "ready", "chart_img": chart_base64})
     except WebSocketDisconnect: pass
 
 @app.get("/api/download/{session_id}")
