@@ -6,11 +6,10 @@
     <title>Enterprise Insights Engine</title>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
-        :root { --bg-dark: #09090b; --bg-main: #ffffff; --surface: #f4f4f5; --border: #e4e4e7; --text-main: #09090b; --text-muted: #71717a; --accent: #18181b; --primary: #2563eb; --danger: #ef4444; --font-xs: 12px; --font-sm: 13px; --font-md: 14px; }
+        :root { --bg-dark: #09090b; --bg-main: #ffffff; --surface: #f4f4f5; --border: #e4e4e7; --text-main: #09090b; --text-muted: #71717a; --accent: #18181b; --primary: #2563eb; --font-xs: 12px; --font-sm: 13px; --font-md: 14px; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: ui-sans-serif, system-ui, sans-serif; font-size: var(--font-sm); color: var(--text-main); background: var(--bg-main); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 
-        /* Modern Top Horizontal Navbar Layout */
         .top-navbar { height: 60px; background: var(--bg-dark); color: #a1a1aa; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; border-bottom: 1px solid #27272a; z-index: 100; }
         .brand { font-weight: 600; font-size: var(--font-md); color: white; }
         .nav-tabs { display: flex; gap: 8px; height: 100%; align-items: center; }
@@ -45,8 +44,7 @@
         th, td { padding: 10px 16px; border-bottom: 1px solid var(--border); }
         th { background: #f8fafc; position: sticky; top: 0; border-bottom: 2px solid var(--border); }
 
-        /* Workspace Grid Split System dimensions */
-        .chat-layout { display: flex; gap: 20px; flex: 1; overflow: hidden; height: calc(100vh - 110px); }
+        .chat-layout { display: flex; gap: 20px; flex: 1; overflow: hidden; height: 100%; }
         .chat-container { flex: 1; border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; background: white; overflow: hidden; }
         .chat-history { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
         .message { padding: 12px 16px; border-radius: 6px; max-width: 85%; line-height: 1.5; }
@@ -57,11 +55,15 @@
         .blueprint-card { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: none; flex-direction: column; gap: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05); }
         .blueprint-title { font-weight: 600; font-size: var(--font-sm); color: var(--bg-dark); border-bottom: 1px solid var(--border); padding-bottom: 8px; }
         
-        .blueprint-item { padding: 14px; background: #fafafa; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px; position: relative; }
+        .blueprint-item { padding: 14px; background: #fafafa; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px; }
         .blueprint-item label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; }
         .blueprint-item input[type="text"] { width: 100%; padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; font-weight: 600; outline: none; }
         .blueprint-item textarea { width: 100%; padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 12px; font-family: inherit; resize: vertical; outline: none; line-height: 1.4; }
         .card-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+
+        .blueprint-table-preview { width: 100%; font-size: 11px; margin-top: 4px; border: 1px solid #cbd5e1; border-collapse: collapse; background: white; }
+        .blueprint-table-preview th { background: #e2e8f0; color: #334155; font-weight: bold; padding: 4px; border: 1px solid #cbd5e1; }
+        .blueprint-table-preview td { padding: 4px; border: 1px solid #cbd5e1; color: #475569; }
 
         .suggestions-bar { padding: 10px 24px; background: #fafafa; border-top: 1px solid var(--border); display: flex; gap: 8px; overflow-x: auto; }
         .suggestion-chip { padding: 6px 12px; background: white; border: 1px solid var(--border); border-radius: 16px; font-size: var(--font-xs); cursor: pointer; white-space: nowrap; transition: 0.2s; color: var(--primary); font-weight: 500; }
@@ -112,7 +114,7 @@
                     <div class="chat-history" id="chatHistory"></div>
                     <div class="suggestions-bar" id="suggestionsBar" style="display: none;"></div>
                     <div class="chat-input-area">
-                        <input type="text" class="chat-field" id="chatInput" placeholder="Type general requests or instructions here..." onkeypress="handleEnter(event)" disabled>
+                        <input type="text" class="chat-field" id="chatInput" placeholder="Type instructions or edit the outline on the right..." onkeypress="handleEnter(event)" disabled>
                         <button class="btn btn-primary" id="sendBtn" onclick="sendChatMessage()" disabled>Send</button>
                     </div>
                 </div>
@@ -120,9 +122,8 @@
                 <div class="preview-desk-container">
                     <div class="blueprint-card" id="chartCard">
                         <div class="blueprint-title">📊 Live Visualization Preview</div>
-                        <img id="previewImage" src="" alt="Compiled Output Graphic">
+                        <img id="previewImage" src="" alt="Live Analysis Visual">
                     </div>
-
                     <div class="blueprint-card" id="blueprintDeskCard">
                         <div class="blueprint-title">🛠️ Interactive Blueprint Editor</div>
                         <div id="blueprintStack"></div>
@@ -234,7 +235,6 @@
                     if(data.draft_slides && data.draft_slides.length > 0) {
                         renderBlueprintPreview(data.draft_slides);
                     }
-                    // IMMEDIATE CHART VISUALIZATION INTERCEPT PIPELINE
                     if (data.chart_img) {
                         document.getElementById("previewImage").src = "data:image/png;base64," + data.chart_img;
                         document.getElementById("chartCard").style.display = "flex";
@@ -262,14 +262,39 @@
                 const sIdx = slide.slide_index;
                 const block = document.createElement("div");
                 block.className = "blueprint-item";
-                const bulletsText = slide.bullet_points.join("\n");
                 
-                // Mount explicit manual save elements side-by-side with localized content regeneration actions
+                let layoutSpecificHTML = "";
+                
+                // RENDER LOGIC SWITCH: If a table is configured, render spreadsheet fields inside the edit panels
+                if(slide.layout_type === "table_grid" && slide.table_headers) {
+                    let headerRow = "<tr>";
+                    slide.table_headers.forEach(h => headerRow += `<th>${h}</th>`);
+                    headerRow += "</tr>";
+                    
+                    let dataRows = "";
+                    slide.table_rows.forEach(r => {
+                        dataRows += "<tr>";
+                        r.forEach(cell => dataRows += `<td>${cell}</td>`);
+                        dataRows += "</tr>";
+                    });
+                    
+                    layoutSpecificHTML = `
+                        <label>Matrix Spreadsheet Layout Grid Preview</label>
+                        <table class="blueprint-table-preview">${headerRow}${dataRows}</table>
+                        <input type="hidden" id="edit-bullets-${sIdx}" value="">
+                    `;
+                } else {
+                    const bulletsText = slide.bullet_points ? slide.bullet_points.join("\n") : "";
+                    layoutSpecificHTML = `
+                        <label style="margin-top:4px;">Bullet Points</label>
+                        <textarea id="edit-bullets-${sIdx}" rows="4">${bulletsText}</textarea>
+                    `;
+                }
+                
                 block.innerHTML = `
                     <label>Slide ${sIdx} Title</label>
                     <input type="text" id="edit-title-${sIdx}" value="${slide.title}">
-                    <label style="margin-top:4px;">Bullet Points</label>
-                    <textarea id="edit-bullets-${sIdx}" rows="4">${bulletsText}</textarea>
+                    ${layoutSpecificHTML}
                     <div class="card-actions">
                         <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="regenerateSlideDirect(${sIdx})">🔄 Regenerate Content</button>
                         <button class="btn btn-primary" style="padding:4px 8px; font-size:11px; background:var(--primary);" onclick="saveSlideDirect(${sIdx})">💾 Save Changes</button>
@@ -282,7 +307,8 @@
 
         function saveSlideDirect(sIdx) {
             const titleValue = document.getElementById(`edit-title-${sIdx}`).value;
-            const bulletsValue = document.getElementById(`edit-bullets-${sIdx}`).value.split("\n").filter(b => b.trim() !== "");
+            const bulletsElem = document.getElementById(`edit-bullets-${sIdx}`);
+            const bulletsValue = bulletsElem.value ? bulletsElem.value.split("\n").filter(b => b.trim() !== "") : [];
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({
                     type: "direct_edit",
@@ -293,14 +319,9 @@
             }
         }
 
-        // TRIGGER PACKET FOR PER-PAGE REGENERATION
         function regenerateSlideDirect(sIdx) {
             if (ws && ws.readyState === WebSocket.OPEN) {
-                document.getElementById(`edit-title-${sIdx}`).value = "Regenerating page elements...";
-                ws.send(JSON.stringify({
-                    type: "regenerate_slide",
-                    slide_index: sIdx
-                }));
+                ws.send(JSON.stringify({ type: "regenerate_slide", slide_index: sIdx }));
             }
         }
 
