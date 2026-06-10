@@ -6,10 +6,11 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, WebSocket, WebSocketDisconnect, Form
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage
 
 load_dotenv()
-from agent import app_engine
+from agent import app_engine, llm, SlideContent, generate_chart_img_base64
 
 app = FastAPI(title="Enterprise Presentation Engine")
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -32,7 +33,6 @@ async def upload_data(file: UploadFile = File(...), sheet_name: str = Form(None)
         df = pd.read_csv(file_bytes)
         
     session_id = str(uuid.uuid4())
-    
     for col in df.columns:
         col_lower = str(col).lower()
         if any(kw in col_lower for kw in ['id', 'code', 'invoice', 'zip', 'phone', 'serial', 'sl']):
@@ -40,8 +40,7 @@ async def upload_data(file: UploadFile = File(...), sheet_name: str = Form(None)
 
     metrics = {
         "rows": f"{len(df):,}", "columns": len(df.columns),
-        "missing_cells": int(df.isnull().sum().sum()),
-        "duplicate_rows": int(df.duplicated().sum()),
+        "missing_cells": int(df.isnull().sum().sum()), "duplicate_rows": int(df.duplicated().sum()),
         "numeric_features": len(df.select_dtypes(include=['number']).columns),
         "memory_usage": f"{df.memory_usage(deep=True).sum() / (1024 * 1024):.2f} MB"
     }
@@ -52,14 +51,10 @@ async def upload_data(file: UploadFile = File(...), sheet_name: str = Form(None)
     initial_state = {
         "schema_info": f"Columns: {columns}\nTypes: {df.dtypes.to_dict()}",
         "dataframe_json": df.to_json(),
-        "current_step": "init",
-        "output_ready": False,
-        "suggestions": [],
-        "messages": []
+        "current_step": "init", "output_ready": False, "suggestions": [], "messages": []
     }
     
     config = {"configurable": {"thread_id": session_id}}
-    
     initial_msg = ""
     suggestions = []
     for event in app_engine.stream(initial_state, config):
@@ -80,54 +75,77 @@ async def chat_websocket(websocket: WebSocket, session_id: str):
     try:
         while True:
             payload = await websocket.receive_json()
+            current_state = app_engine.get_state(config).values
+            slides = list(current_state.get("draft_slides", []))
             
+            # ROUTING VECTOR 1: Direct structural manual edit request
             if payload.get("type") == "direct_edit":
-                current_state = app_engine.get_state(config).values
-                slides = list(current_state.get("draft_slides", []))
                 target_idx = payload.get("slide_index")
-                
                 for s in slides:
                     if s.get("slide_index") == target_idx:
                         s["title"] = payload.get("title")
                         s["bullet_points"] = payload.get("bullet_points")
                         break
-                
                 app_engine.update_state(config, {"draft_slides": slides})
+                await websocket.send_json({"type": "message", "content": f"📝 **Slide {target_idx} manual changes saved to state.**", "suggestions": ["Approve Plan & Compile"], "draft_slides": slides})
+                continue
+
+            # ROUTING VECTOR 2: PER-PAGE CONTENT REGENERATION ATTACHMENT HOOK
+            elif payload.get("type") == "regenerate_slide":
+                target_idx = payload.get("slide_index")
                 
-                await websocket.send_json({
-                    "type": "message",
-                    "content": f"✨ **Slide {target_idx} updated manually.**",
-                    "suggestions": ["Approve Plan & Compile"],
-                    "draft_slides": slides
-                })
+                regen_prompt = f"""
+                You are an advanced slide content localized re-generation micro-agent.
+                Regenerate a data-rich version of Slide Index {target_idx} based on this context data profile:
+                {current_state.get('data_summary')}
+                
+                Target Persona Requirements: {current_state.get('persona')}
+                Core Operational Scenario: {current_state.get('topics')}
+                
+                Return a data-dense, fully formed slide outline structure for this slide index.
+                """
+                new_slide_content = llm.with_structured_output(SlideContent).invoke([SystemMessage(content=regen_prompt)])
+                
+                for s in slides:
+                    if s.get("slide_index") == target_idx:
+                        s["title"] = new_slide_content.title
+                        s["bullet_points"] = new_slide_content.bullet_points
+                        break
+                        
+                app_engine.update_state(config, {"draft_slides": slides})
+                await websocket.send_json({"type": "message", "content": f"🔄 **Slide {target_idx} successfully contextually re-drafted.**", "suggestions": ["Approve Plan & Compile"], "draft_slides": slides})
                 continue
             
+            # ROUTING VECTOR 3: Standard conversational workflow streaming
             elif payload.get("type") == "chat":
                 user_input = payload.get("content")
+                
+                # Dynamic adjustment tracking to update chart previews during review phases
+                if current_state.get("current_step") == "review_slides" and any(w in user_input.lower() for w in ["graph", "plot", "chart"]):
+                    new_b64, _ = generate_chart_img_base64(current_state, user_input)
+                    if new_b64:
+                        app_engine.update_state(config, {"chart_img_base64": new_b64, "graph_request": user_input})
+                
                 for event in app_engine.stream({"messages": [HumanMessage(content=user_input)]}, config):
                     for value in event.values():
                         if "messages" in value:
                             bot_response = value["messages"][-1].content
                             suggs = value.get("suggestions", [])
                             
-                            current_state = app_engine.get_state(config).values
-                            draft_slides = current_state.get("draft_slides", [])
+                            updated_state = app_engine.get_state(config).values
+                            draft_slides = updated_state.get("draft_slides", [])
+                            chart_b64 = updated_state.get("chart_img_base64", "")
                             
                             await websocket.send_json({
-                                "type": "message", 
-                                "content": bot_response, 
-                                "suggestions": suggs,
-                                "draft_slides": draft_slides
+                                "type": "message", "content": bot_response, 
+                                "suggestions": suggs, "draft_slides": draft_slides,
+                                "chart_img": chart_b64
                             })
                             
                 state = app_engine.get_state(config).values
                 if state.get("output_ready"):
                     chart_base64 = state.get("chart_img_base64", "")
-                    await websocket.send_json({
-                        "type": "ready", 
-                        "chart_img": chart_base64,
-                        "suggestions": ["Yes, Start New Session"]
-                    })
+                    await websocket.send_json({"type": "ready", "chart_img": chart_base64, "suggestions": ["Yes, Start New Session"]})
     except WebSocketDisconnect: pass
 
 @app.get("/api/download/{session_id}")
