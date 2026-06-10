@@ -108,7 +108,7 @@ def apply_dark_background(slide):
     left = top = Inches(0)
     width = Inches(13.333)
     height = Inches(7.5)
-    bg_shape = slide.shapes.add_shape(1, left, top, width, height) # 1 maps to Rectangle Geometry
+    bg_shape = slide.shapes.add_shape(1, left, top, width, height)
     bg_shape.fill.solid()
     bg_shape.fill.fore_color.rgb = RGBColor(*DARK_BG)
     bg_shape.line.fill.background()
@@ -169,13 +169,12 @@ def generate_chart_img_base64(state: PresentationState, graph_request_str: str) 
         print(f"Plot Preview Error: {e}")
         return "", None
 
-# --- Graph Orchestration Nodes ---
+# --- Graph Nodes ---
 
 def ingest_and_summarize(state: PresentationState):
-    """Step 0: Evaluates data profile and prepares system orchestrator states."""
-    msg = ("### 📊 Data Profile Loaded & Synchronized\n"
-           "Your dataset metrics are cataloged and visible in your **Data Quality Lab Dashboard**. "
-           "You can use the pipeline toolkit on the left to treat anomalies, or proceed straight to architecture design.\n\n"
+    msg = ("### 📊 Data Profile Loaded & Sync Completed\n"
+           "Your multi-sheet schemas and descriptive metrics have been parsed. "
+           "Review the records inside the **Data Quality Hub** page, evaluate distributions inside the Visual Insights Lab, or proceed to build your presentation track below.\n\n"
            "**Who is the target persona or audience for this presentation deck?**")
     return {
         "current_step": "persona",
@@ -196,11 +195,11 @@ def process_wizard_step(state: PresentationState):
         }
 
     if step == "persona":
-        prompt = f"Data Summary Overview Metrics:\n{state['data_summary']}\nPersona Selected: {user_input}\nSuggest 3 highly distinct scenario topics matching this persona."
+        prompt = f"Data Summary Metrics:\n{state['data_summary']}\nPersona Selected: {user_input}\nSuggest 3 key operational scenarios."
         topics = sugg_llm.invoke([SystemMessage(content=prompt)]).suggestions
         return {
             "persona": user_input, "current_step": "topics", "suggestions": topics,
-            "messages": [AIMessage(content=f"Got it. Target Audience: **{user_input}**.\n\nWhat specific **topics or operational scenarios** should we focus on?")]
+            "messages": [AIMessage(content=f"Got it. Target Audience: **{user_input}**.\n\nWhat specific **topics or scenarios** should we focus on?")]
         }
 
     elif step == "topics":
@@ -210,7 +209,7 @@ def process_wizard_step(state: PresentationState):
         }
 
     elif step == "pages":
-        prompt = f"Dataset Metrics Profile Summary Context: {state['data_summary']}\nPersona Group: {state['persona']}\nFocus Area: {state['topics']}\nSuggest 3 executive, metric-focused Presentation Deck Titles."
+        prompt = f"Context metrics: {state['data_summary']}\nPersona: {state['persona']}\nSuggest 3 data-focused Presentation Main Titles."
         titles = sugg_llm.invoke([SystemMessage(content=prompt)]).suggestions
         return {
             "pages": user_input, "current_step": "title", "suggestions": titles,
@@ -222,51 +221,51 @@ def process_wizard_step(state: PresentationState):
         if "data analyst" in p_lower:
             persona_pref = "Data Analyst (The Gatekeeper): Focuses on distributions, anomalies. Prefers Histograms, Box Plots, Scatter Plots."
         elif "financial" in p_lower:
-            persona_pref = "Financial Analyst (The Monetizer): Focuses on profit margins, costs, budgets variances. Prefers Bar/Line charts."
+            persona_pref = "Financial Analyst (The Monetizer): Focuses on cash flows, profit margins, targets vs actual variances. Prefers Bar/Line charts."
         elif "marketing" in p_lower:
-            persona_pref = "Marketing Team (The Behavioralist): Focuses on segmentation matrices, engagement trends. Prefers Funnel/Bar charts."
+            persona_pref = "Marketing Team (The Behavioralist): Focuses on segment matrices, customer dropoff trends. Prefers Funnel/Bar charts."
         else:
-            persona_pref = "Executive Board (The Strategist): Focuses on high-level macro trajectories, strategy KPI health aggregates. Prefers trend lines or summary bars."
+            persona_pref = "Executive Board (The Strategist): Focuses on high-level macro trajectories, aggregate business KPI metrics. Prefers simplified trend lines."
 
-        prompt = f"Dataset Columns Schema: {state['schema_info']}\nAudience Guidelines Focus: {persona_pref}\nSuggest 3 contextually optimized visualizations matplotlib can draw based on fields."
+        prompt = f"Dataset Columns Schema: {state['schema_info']}\nAudience Guidelines Focus: {persona_pref}\nSuggest 3 contextually optimized visualizations based on columns."
         graphs = sugg_llm.invoke([SystemMessage(content=prompt)]).suggestions
         return {
             "title": user_input, "current_step": "graph", "suggestions": graphs + ["No Graph Needed"],
-            "messages": [AIMessage(content=f"Great title choices! Based on your target persona and schema columns, what **graph or visualization** should we embed?")]
+            "messages": [AIMessage(content=f"Great titles! Based on your target persona and schema columns, what **graph or visualization** should we embed?")]
         }
 
     elif step == "graph":
         p_lower = str(state.get("persona", "")).lower()
         if "data analyst" in p_lower:
-            audience_guardrail = "AUDIENCE: DATA ANALYST (THE GATEKEEPER). Focus heavily on statistical distributions, variance limits, anomalies, and mathematical structural verification metrics."
+            audience_guardrail = "AUDIENCE: DATA ANALYST (THE GATEKEEPER). Focus heavily on distributions, statistical variances, ranges, anomalies, and structural metadata parameters."
         elif "financial" in p_lower:
-            audience_guardrail = "AUDIENCE: FINANCIAL ANALYST (THE MONETIZER). Focus heavily on operating profit margins, variances vs budgets, financial risks, and capital performance outcomes."
+            audience_guardrail = "AUDIENCE: FINANCIAL ANALYST (THE MONETIZER). Focus heavily on margins, cash flows, variances vs budgets, and asset risk parameters."
         elif "marketing" in p_lower:
-            audience_guardrail = "AUDIENCE: MARKETING TEAM (THE BEHAVIORALIST). Focus heavily on customer behavior segments, retention vectors, funnel conversions, and ROI metrics."
+            audience_guardrail = "AUDIENCE: MARKETING TEAM (THE BEHAVIORALIST). Focus heavily on conversions, behavioral segments map trajectories, retention ratios."
         else:
-            audience_guardrail = "AUDIENCE: EXECUTIVE BOARD (THE STRATEGIST). Focus completely on macro trajectories, strategic objectives, high-level corporate trajectories, and aggregated business health indicators."
+            audience_guardrail = "AUDIENCE: EXECUTIVE BOARD (THE STRATEGIST). Focus completely on corporate high-level trajectories, strategic macro outcomes, and clear bottom line outcomes."
 
         chart_b64, _ = generate_chart_img_base64(state, user_input)
 
         generation_prompt = f"""
-        You are an elite corporate slide deck content architect. Create a comprehensive presentation blueprint framework outline.
+        You are an elite slide content architect. Create a structured slide deck presentation outline array.
         {audience_guardrail}
-        Data Summary Profile Foundation Context: {state['data_summary']}
+        Data Context Profile: {state['data_summary']}
         Blueprint Directives:
-        - Title: {state['title']} | Audience: {state['persona']} | Core Objective Focus: {state['topics']} | Slide Count: {state['pages']} Slides
+        - Title: {state['title']} | Audience: {state['persona']} | Focus: {state['topics']} | Length: {state['pages']} Slides
         
-        CRITICAL ENGINE STRUCTURE RULES:
-        - If presenting clean bulleted textual lists, use layout_type 'bullet_layout'.
-        - If displaying raw multi-column tables, matrices, or row metrics datasets summaries, use layout_type 'table_grid' and fill table_headers and table_rows data blocks.
-        - If demonstrating budgets vs actual performance metrics comparisons, you MUST use layout_type 'variance_analysis' and fill variance_data rows.
-        - If tracing down an error trend or performance breakdown anomaly, you MUST use layout_type 'root_cause' and populate the root_cause_data fields.
+        CRITICAL MULTI-LAYOUT FRAMEWORK SELECTION GUIDELINES:
+        - For standard metrics narratives, use layout_type 'bullet_layout'.
+        - For raw summary tables or data matrix outputs, use layout_type 'table_grid'.
+        - If comparing projections vs performance or targets vs actuals, you MUST use layout_type 'variance_analysis' and populate the 'variance_data' array object blocks.
+        - If analyzing a performance plunge, bottleneck, or distinct data anomaly, you MUST use layout_type 'root_cause' and populate the 'root_cause_data' mapping object.
         """
         deck_draft = llm.with_structured_output(PresentationDeck).invoke([SystemMessage(content=generation_prompt)])
         slides_dict = [slide.model_dump() for slide in deck_draft.slides]
         
-        msg = ("### 🛠️ Presentation Strategy Structural Outline Compiled\n"
+        msg = ("### 🛠️ Presentation Outline Blueprint Generated\n"
                "The slide blueprint design framework and visualization preview are processed. "
-               "You can **manually edit any slide card title, bullet text array, or table cell value on the right panel**, "
+               "You can **manually edit any slide title, bullet text array, or table cell value on the right panel**, "
                "or ask me to apply transformations here. Click **Approve Plan & Compile Presentation** to generate your PowerPoint deck.")
         
         return {
@@ -276,17 +275,17 @@ def process_wizard_step(state: PresentationState):
 
     elif step == "review_slides":
         if "approve" in user_input.lower() or "compile" in user_input.lower():
-            return {"current_step": "generating", "suggestions": [], "messages": [AIMessage(content="⚙️ Layout approved. Executing multi-agent validation loops and writing widescreen binary streams...")]}
+            return {"current_step": "generating", "suggestions": [], "messages": [AIMessage(content="⚙️ Compilation approved. Running data consistency auditing loops...")]}
         else:
             edit_prompt = f"""Modify this existing slide blueprint layout matching instructions. Keep data observations structurally sound.
-            Data Metrics Context: {state['data_summary']}
+            Data Profile Context: {state['data_summary']}
             Current Slide Structure Layout: {json.dumps(state.get('draft_slides', []))}
             User Mutation Command: "{user_input}" """
             updated_deck = llm.with_structured_output(PresentationDeck).invoke([SystemMessage(content=edit_prompt)])
             slides_dict = [slide.model_dump() for slide in updated_deck.slides]
             return {
                 "draft_slides": slides_dict, "suggestions": ["Approve Plan & Compile Presentation"],
-                "messages": [AIMessage(content=f"🔄 Blueprint updated with request: *\"{user_input}\"*. Review changes in the preview panel.")]
+                "messages": [AIMessage(content=f"🔄 Blueprint updated with request: *\"{user_input}\"*.")]
             }
 
 def generate_presentation(state: PresentationState):
@@ -304,7 +303,6 @@ def generate_presentation(state: PresentationState):
     chart_b64, chart_spec = generate_chart_img_base64(state, state["graph_request"])
     chart_bytes = io.BytesIO(base64.b64decode(chart_b64)) if chart_b64 else None
 
-    # PowerPoint Compiler Construction Engine (16:9 widescreen config)
     prs = Presentation()
     prs.slide_width = Inches(13.333)
     prs.slide_height = Inches(7.5)
@@ -319,7 +317,7 @@ def generate_presentation(state: PresentationState):
     add_styled_text(tf, state.get('title', 'Generated Report'), 44, bold=True, color_rgb=TEXT_LIGHT, is_first=True, space_after=18)
     add_styled_text(tf, f"Target Operational Focus: {state.get('persona', 'Enterprise Stakeholders')}", 20, bold=False, color_rgb=ACCENT_BLUE)
 
-    # --- Framework Dispatcher Render Loop ---
+    # --- Framework Dispatcher Loop ---
     for raw_slide in validated_slides:
         slide = prs.slides.add_slide(blank_layout)
         apply_dark_background(slide)
@@ -331,7 +329,7 @@ def generate_presentation(state: PresentationState):
         
         l_type = raw_slide.get("layout_type")
         
-        # FIXED CONTRAST HOOK 1: VARIANCE ANALYSIS TABLE COMPILER (Light Cell Fill, Pure Black Text)
+        # FIXED CONTRAST HOOK: VARIANCE ANALYSIS TABLE COMPILER (Light Cell Fill, Pure Black Text)
         if l_type == "variance_analysis" and raw_slide.get("variance_data"):
             v_data = raw_slide["variance_data"]
             table_shape = slide.shapes.add_table(len(v_data) + 1, 5, Inches(1.0), Inches(2.0), Inches(11.333), Inches(4.5)).table
@@ -340,7 +338,7 @@ def generate_presentation(state: PresentationState):
                 cell = table_shape.cell(0, c_idx)
                 cell.text = h_text
                 cell.fill.solid()
-                cell.fill.fore_color.rgb = RGBColor(30, 41, 59) # Deep Blue Gray Header Row
+                cell.fill.fore_color.rgb = RGBColor(30, 41, 59)
                 cell.text_frame.paragraphs[0].font.color.rgb = RGBColor(*ACCENT_BLUE)
                 cell.text_frame.paragraphs[0].font.bold = True
                 
@@ -351,7 +349,7 @@ def generate_presentation(state: PresentationState):
                     cell.fill.solid()
                     cell.fill.fore_color.rgb = RGBColor(*TABLE_CELL_BG)
                     p = cell.text_frame.paragraphs[0]
-                    p.font.color.rgb = RGBColor(*TEXT_DARK) # HIGH-CONTRAST BLACK CONTENT FONT
+                    p.font.color.rgb = RGBColor(*TEXT_DARK) # PURE BLACK TEXT FOR LIGHT TABLES CELLS CONTENT
                     p.font.size = Pt(13)
                 
                 p_cell = table_shape.cell(r_idx + 1, 4)
@@ -366,7 +364,6 @@ def generate_presentation(state: PresentationState):
                 else:
                     p.font.color.rgb = RGBColor(16, 185, 129)
 
-        # RUNTIME FRAMEWORK 2: ROOT CAUSE BLOCK SCHEMATIC
         elif l_type == "root_cause" and raw_slide.get("root_cause_data"):
             rc = raw_slide["root_cause_data"]
             
@@ -389,7 +386,7 @@ def generate_presentation(state: PresentationState):
             add_styled_text(r_tf, "⚡ Remediation Action Plan", 14, bold=True, color_rgb=(16, 185, 129), is_first=True)
             add_styled_text(r_tf, rc["remediation"], 15, bold=False, color_rgb=TEXT_LIGHT)
 
-        # FIXED CONTRAST HOOK 2: DATA TABLE GRID MATRIX COMPILER (Light Cell Fill, Pure Black Text)
+        # FIXED CONTRAST HOOK: DATA GRID MATRIX TABLE COMPILER (Light Cell Fill, Pure Black Text)
         elif l_type == "table_grid" and raw_slide.get("table_headers"):
             headers = raw_slide["table_headers"]
             rows = raw_slide["table_rows"]
@@ -409,17 +406,15 @@ def generate_presentation(state: PresentationState):
                     cell.fill.solid()
                     cell.fill.fore_color.rgb = RGBColor(*TABLE_CELL_BG)
                     p = cell.text_frame.paragraphs[0]
-                    p.font.color.rgb = RGBColor(*TEXT_DARK) # HIGH-CONTRAST BLACK CONTENT FONT
+                    p.font.color.rgb = RGBColor(*TEXT_DARK) # PURE BLACK TEXT FOR LIGHT TABLES CELLS CONTENT
                     p.font.size = Pt(13)
         else:
-            # Layout Type 4: Classic corporate widescreen bullet templates
             body_box = slide.shapes.add_textbox(Inches(1.0), Inches(1.8), Inches(11.333), Inches(5.0))
             tf_body = body_box.text_frame
             tf_body.word_wrap = True
             for idx, bullet in enumerate(raw_slide.get("bullet_points", [])):
                 add_styled_text(tf_body, f"•  {bullet}", 16, bold=False, color_rgb=MUTED_TEXT, is_first=(idx == 0), space_after=14)
                 
-    # --- Side-By-Side Visual Metric Takeaways slide ---
     if chart_bytes and chart_spec:
         slide = prs.slides.add_slide(blank_layout)
         apply_dark_background(slide)
@@ -440,7 +435,7 @@ def generate_presentation(state: PresentationState):
     return {
         "output_ready": True, "current_step": "done", "final_pptx_bytes": output_stream.getvalue(),
         "suggestions": ["Yes, Start New Session"],
-        "messages": [AIMessage(content="🎉 **Success!** Your presentation strategy has been audited and compiled into a premium executive high-contrast dark PowerPoint presentation deck.")]
+        "messages": [AIMessage(content="🎉 **Success!** Your presentation deck has been compiled with data-validated layouts.")]
     }
 
 def start_router(state: PresentationState):
