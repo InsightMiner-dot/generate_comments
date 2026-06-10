@@ -51,7 +51,7 @@
         .ai-msg { align-self: flex-start; background: #f8fafc; border-left: 3px solid var(--primary); }
         .user-msg { align-self: flex-end; background: var(--surface); border: 1px solid var(--border); }
         
-        .preview-desk-container { width: 460px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; height: 100%; }
+        .preview-desk-container { width: 480px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; height: 100%; }
         .blueprint-card { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: none; flex-direction: column; gap: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05); }
         .blueprint-title { font-weight: 600; font-size: var(--font-sm); color: var(--bg-dark); border-bottom: 1px solid var(--border); padding-bottom: 8px; }
         
@@ -59,6 +59,7 @@
         .blueprint-item label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; }
         .blueprint-item input[type="text"] { width: 100%; padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; font-weight: 600; outline: none; }
         .blueprint-item textarea { width: 100%; padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 12px; font-family: inherit; resize: vertical; outline: none; line-height: 1.4; }
+        .framework-badge { display: inline-block; padding: 2px 6px; border-radius: 4px; background: #e0f2fe; color: #0369a1; font-size: 10px; font-weight: 700; width: fit-content; margin-bottom: 4px; }
         .card-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 
         .blueprint-table-preview { width: 100%; font-size: 11px; margin-top: 4px; border: 1px solid #cbd5e1; border-collapse: collapse; background: white; }
@@ -216,7 +217,8 @@
                 appendMessage("ai-msg", data.initial_message);
                 renderSuggestions(data.suggestions);
                 initWebSocket(currentSessionId);
-                switchTab('builder');
+                
+                // FIXED: Removed automated page tab switch here to stay on the data view page upon upload completion
 
             } catch (err) {
                 alert("Upload failed: " + err.message);
@@ -263,26 +265,38 @@
                 const block = document.createElement("div");
                 block.className = "blueprint-item";
                 
+                let frameworkBadge = "";
                 let layoutSpecificHTML = "";
                 
-                // RENDER LOGIC SWITCH: If a table is configured, render spreadsheet fields inside the edit panels
-                if(slide.layout_type === "table_grid" && slide.table_headers) {
+                if (slide.layout_type === "variance_analysis") {
+                    frameworkBadge = `<div class="framework-badge">📈 VARIANCE ANALYSIS ACTIVE</div>`;
+                    let rowsHTML = "<tr><th>Metric</th><th>Target</th><th>Actual</th><th>Var</th><th>%</th></tr>";
+                    slide.variance_data.forEach(v => {
+                        rowsHTML += `<tr><td>${v.metric_name}</td><td>${v.baseline}</td><td>${v.actual}</td><td>${v.deviation}</td><td>${v.percentage}</td></tr>`;
+                    });
+                    layoutSpecificHTML = `<table class="blueprint-table-preview">${rowsHTML}</table>`;
+                } 
+                else if (slide.layout_type === "root_cause") {
+                    frameworkBadge = `<div class="framework-badge">🔍 ROOT CAUSE (5-WHYS) ACTIVE</div>`;
+                    layoutSpecificHTML = `
+                        <div style="font-size:11px; padding:6px; background:white; border:1px solid #cbd5e1; border-radius:4px;">
+                            <strong>Symptom:</strong> ${slide.root_cause_data.symptom}<br>
+                            <strong>Vectors:</strong> ${slide.root_cause_data.contributing_factors.join(" | ")}<br>
+                            <strong>Remediation:</strong> ${slide.root_cause_data.remediation}
+                        </div>`;
+                }
+                else if(slide.layout_type === "table_grid" && slide.table_headers) {
+                    frameworkBadge = `<div class="framework-badge">📊 TABLE MATRIX ACTIVE</div>`;
                     let headerRow = "<tr>";
                     slide.table_headers.forEach(h => headerRow += `<th>${h}</th>`);
                     headerRow += "</tr>";
-                    
                     let dataRows = "";
                     slide.table_rows.forEach(r => {
                         dataRows += "<tr>";
                         r.forEach(cell => dataRows += `<td>${cell}</td>`);
                         dataRows += "</tr>";
                     });
-                    
-                    layoutSpecificHTML = `
-                        <label>Matrix Spreadsheet Layout Grid Preview</label>
-                        <table class="blueprint-table-preview">${headerRow}${dataRows}</table>
-                        <input type="hidden" id="edit-bullets-${sIdx}" value="">
-                    `;
+                    layoutSpecificHTML = `<table class="blueprint-table-preview">${headerRow}${dataRows}</table>`;
                 } else {
                     const bulletsText = slide.bullet_points ? slide.bullet_points.join("\n") : "";
                     layoutSpecificHTML = `
@@ -292,6 +306,7 @@
                 }
                 
                 block.innerHTML = `
+                    ${frameworkBadge}
                     <label>Slide ${sIdx} Title</label>
                     <input type="text" id="edit-title-${sIdx}" value="${slide.title}">
                     ${layoutSpecificHTML}
@@ -308,7 +323,7 @@
         function saveSlideDirect(sIdx) {
             const titleValue = document.getElementById(`edit-title-${sIdx}`).value;
             const bulletsElem = document.getElementById(`edit-bullets-${sIdx}`);
-            const bulletsValue = bulletsElem.value ? bulletsElem.value.split("\n").filter(b => b.trim() !== "") : [];
+            const bulletsValue = (bulletsElem && bulletsElem.value) ? bulletsElem.value.split("\n").filter(b => b.trim() !== "") : [];
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({
                     type: "direct_edit",
