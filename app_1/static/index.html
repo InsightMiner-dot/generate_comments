@@ -8,80 +8,85 @@
     <style>
         :root { --bg-dark: #09090b; --bg-main: #ffffff; --surface: #f4f4f5; --border: #e4e4e7; --text-main: #09090b; --text-muted: #71717a; --accent: #18181b; --primary: #2563eb; --danger: #ef4444; --font-xs: 12px; --font-sm: 13px; --font-md: 14px; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: ui-sans-serif, system-ui, sans-serif; font-size: var(--font-sm); color: var(--text-main); background: var(--bg-main); display: flex; height: 100vh; overflow: hidden; }
+        body { font-family: ui-sans-serif, system-ui, sans-serif; font-size: var(--font-sm); color: var(--text-main); background: var(--bg-main); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 
-        .sidebar { width: 240px; background: var(--bg-dark); color: #a1a1aa; display: flex; flex-direction: column; border-right: 1px solid #27272a; }
-        .brand { padding: 20px; font-weight: 600; font-size: var(--font-md); color: white; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #27272a; }
-        .nav-items { padding: 15px 0; flex: 1; }
-        .nav-item { padding: 8px 20px; cursor: pointer; font-weight: 500; transition: 0.2s; border-left: 2px solid transparent; }
-        .nav-item:hover { color: white; }
-        .nav-item.active { background: #18181b; color: white; border-left-color: var(--primary); }
-        .nav-item.locked { opacity: 0.4; cursor: not-allowed; }
-        .main-view { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-        .header { height: 55px; border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 24px; font-weight: 600; background: white; }
-        .content { flex: 1; overflow-y: auto; padding: 24px; display: none; flex-direction: column; gap: 24px; }
+        /* Modern Top Horizontal Navbar Layout */
+        .top-navbar { height: 60px; background: var(--bg-dark); color: #a1a1aa; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; border-bottom: 1px solid #27272a; z-index: 100; }
+        .brand { font-weight: 600; font-size: var(--font-md); color: white; }
+        .nav-tabs { display: flex; gap: 8px; height: 100%; align-items: center; }
+        .nav-tab { padding: 8px 16px; cursor: pointer; font-weight: 500; transition: 0.2s; border-radius: 6px; color: #a1a1aa; }
+        .nav-tab:hover { color: white; }
+        .nav-tab.active { background: #18181b; color: white; border: 1px solid #27272a; }
+        .nav-tab.locked { opacity: 0.4; cursor: not-allowed; }
+        
+        .main-workspace { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: #fafafa; }
+        .content { flex: 1; overflow-y: auto; padding: 24px; display: none; flex-direction: column; gap: 24px; height: 100%; }
         .content.active { display: flex; }
 
-        .btn { padding: 8px 16px; border-radius: 6px; font-size: var(--font-sm); font-weight: 500; cursor: pointer; border: 1px solid transparent; }
+        .btn { padding: 8px 16px; border-radius: 6px; font-size: var(--font-sm); font-weight: 500; cursor: pointer; border: 1px solid transparent; display: inline-flex; align-items: center; gap: 6px; }
         .btn-primary { background: var(--accent); color: white; }
         .btn-primary:hover:not(:disabled) { background: #27272a; }
+        .btn-secondary { background: white; border: 1px solid var(--border); color: var(--text-main); }
+        .btn-secondary:hover:not(:disabled) { background: var(--surface); }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
         
-        .upload-panel { display: flex; align-items: center; gap: 15px; padding: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+        #downloadBtn { background: #10b981; color: white; font-weight: 600; display: none; }
+        #downloadBtn:hover { background: #059669; }
+
+        .upload-panel { display: flex; align-items: center; gap: 15px; padding: 16px; background: white; border: 1px solid var(--border); border-radius: 8px; }
         select { padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border); background: white; outline: none; font-size: var(--font-sm); }
         
         .metrics-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; display: none; }
         .metric-card { padding: 16px; border: 1px solid var(--border); border-radius: 8px; background: white; }
         .metric-label { font-size: var(--font-xs); color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; }
-        .metric-value { font-size: 24px; font-weight: 600; }
-        .table-container { border: 1px solid var(--border); border-radius: 8px; overflow: auto; display: none; height: calc(100vh - 280px); }
+        .metric-value { font-size: 20px; font-weight: 600; }
+        .table-container { border: 1px solid var(--border); border-radius: 8px; overflow: auto; display: none; background: white; flex: 1; min-height: 300px; }
         table { width: 100%; border-collapse: collapse; text-align: left; font-size: var(--font-xs); white-space: nowrap; }
         th, td { padding: 10px 16px; border-bottom: 1px solid var(--border); }
-        th { background: #fafafa; position: sticky; top: 0; border-bottom: 2px solid var(--border); }
+        th { background: #f8fafc; position: sticky; top: 0; border-bottom: 2px solid var(--border); }
 
-        .chat-layout { display: flex; gap: 20px; flex: 1; overflow: hidden; height: 100%; }
+        /* Workspace Grid Split System dimensions */
+        .chat-layout { display: flex; gap: 20px; flex: 1; overflow: hidden; height: calc(100vh - 110px); }
         .chat-container { flex: 1; border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; background: white; overflow: hidden; }
         .chat-history { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
         .message { padding: 12px 16px; border-radius: 6px; max-width: 85%; line-height: 1.5; }
         .ai-msg { align-self: flex-start; background: #f8fafc; border-left: 3px solid var(--primary); }
         .user-msg { align-self: flex-end; background: var(--surface); border: 1px solid var(--border); }
         
-        .preview-desk-container { width: 440px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; height: 100%; }
+        .preview-desk-container { width: 460px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; height: 100%; }
         .blueprint-card { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: none; flex-direction: column; gap: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05); }
         .blueprint-title { font-weight: 600; font-size: var(--font-sm); color: var(--bg-dark); border-bottom: 1px solid var(--border); padding-bottom: 8px; }
         
-        .blueprint-item { padding: 12px; background: #fafafa; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px; }
+        .blueprint-item { padding: 14px; background: #fafafa; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px; position: relative; }
         .blueprint-item label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; }
         .blueprint-item input[type="text"] { width: 100%; padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; font-weight: 600; outline: none; }
         .blueprint-item textarea { width: 100%; padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 12px; font-family: inherit; resize: vertical; outline: none; line-height: 1.4; }
+        .card-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 
         .suggestions-bar { padding: 10px 24px; background: #fafafa; border-top: 1px solid var(--border); display: flex; gap: 8px; overflow-x: auto; }
         .suggestion-chip { padding: 6px 12px; background: white; border: 1px solid var(--border); border-radius: 16px; font-size: var(--font-xs); cursor: pointer; white-space: nowrap; transition: 0.2s; color: var(--primary); font-weight: 500; }
         .suggestion-chip:hover { border-color: var(--primary); background: #eff6ff; }
 
         .chat-input-area { padding: 16px 24px; background: white; border-top: 1px solid var(--border); display: flex; gap: 12px; align-items: center; }
-        input[type="text"] { flex: 1; padding: 10px 16px; border: 1px solid var(--border); border-radius: 6px; outline: none; }
-        input[type="text"]:focus { border-color: var(--primary); }
-        #downloadBtn { display: none; width: 100%; justify-content: center; margin-top: 10px; background: #10b981; }
+        input[type="text"].chat-field { flex: 1; padding: 10px 16px; border: 1px solid var(--border); border-radius: 6px; outline: none; }
+        input[type="text"].chat-field:focus { border-color: var(--primary); }
         #chartCard img { width: 100%; height: auto; border-radius: 4px; border: 1px solid var(--border); margin-top: 8px; }
     </style>
 </head>
 <body>
 
-    <div class="sidebar">
-        <div class="brand">Data Engine</div>
-        <div class="nav-items">
-            <div class="nav-item active" id="nav-home" onclick="switchTab('home')">1. Data Quality Hub</div>
-            <div class="nav-item locked" id="nav-builder" onclick="switchTab('builder')">2. Presentation Builder</div>
+    <div class="top-navbar">
+        <div class="brand">Data Engine Workspace</div>
+        <div class="nav-tabs">
+            <div class="nav-tab active" id="nav-home" onclick="switchTab('home')">1. Data Quality Hub</div>
+            <div class="nav-tab locked" id="nav-builder" onclick="switchTab('builder')">2. Presentation Builder</div>
         </div>
-        <div style="padding: 20px;">
-            <button class="btn btn-primary" id="downloadBtn" onclick="triggerDownload()">📥 Download .PPTX</button>
+        <div>
+            <button class="btn" id="downloadBtn" onclick="triggerDownload()">📥 Download PowerPoint</button>
         </div>
     </div>
 
-    <div class="main-view">
-        <div class="header" id="headerTitle">Data Quality Hub</div>
-
+    <div class="main-workspace">
         <div id="view-home" class="content active">
             <div class="upload-panel">
                 <input type="file" id="fileInput" accept=".csv, .xlsx, .xls">
@@ -107,19 +112,20 @@
                     <div class="chat-history" id="chatHistory"></div>
                     <div class="suggestions-bar" id="suggestionsBar" style="display: none;"></div>
                     <div class="chat-input-area">
-                        <input type="text" id="chatInput" placeholder="Type general requests or modify slides directly on the right..." onkeypress="handleEnter(event)" disabled>
+                        <input type="text" class="chat-field" id="chatInput" placeholder="Type general requests or instructions here..." onkeypress="handleEnter(event)" disabled>
                         <button class="btn btn-primary" id="sendBtn" onclick="sendChatMessage()" disabled>Send</button>
                     </div>
                 </div>
                 
                 <div class="preview-desk-container">
+                    <div class="blueprint-card" id="chartCard">
+                        <div class="blueprint-title">📊 Live Visualization Preview</div>
+                        <img id="previewImage" src="" alt="Compiled Output Graphic">
+                    </div>
+
                     <div class="blueprint-card" id="blueprintDeskCard">
                         <div class="blueprint-title">🛠️ Interactive Blueprint Editor</div>
                         <div id="blueprintStack"></div>
-                    </div>
-                    <div class="blueprint-card" id="chartCard">
-                        <div class="blueprint-title">📊 Compiled Analytics Visual</div>
-                        <img id="previewImage" src="" alt="Compiled Output Graphic">
                     </div>
                 </div>
             </div>
@@ -133,14 +139,12 @@
         function switchTab(tabId) {
             if (tabId === 'builder' && document.getElementById('nav-builder').classList.contains('locked')) return;
             document.querySelectorAll('.content').forEach(el => el.classList.remove('active'));
-            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
             document.getElementById(`view-${tabId}`).classList.add('active');
             document.getElementById(`nav-${tabId}`).classList.add('active');
-            document.getElementById('headerTitle').innerText = tabId === 'home' ? 'Data Quality Hub' : 'Presentation Builder';
         }
 
         function clearSessionUI() {
-            // CRITICAL RESET HOOK: Resets all components when a new file upload is initiated
             document.getElementById('chatHistory').innerHTML = "";
             document.getElementById('blueprintStack').innerHTML = "";
             document.getElementById('blueprintDeskCard').style.display = "none";
@@ -156,11 +160,9 @@
             const btn = document.getElementById('uploadBtn');
             const sheetSelect = document.getElementById('sheetSelect');
             
-            // Only trigger visual UI cleanup if this is the initial sheet processing step
             if (sheetSelect.style.display === "none") {
                 clearSessionUI();
             }
-
             btn.innerText = "Profiling..."; btn.disabled = true;
 
             const formData = new FormData();
@@ -213,6 +215,7 @@
                 appendMessage("ai-msg", data.initial_message);
                 renderSuggestions(data.suggestions);
                 initWebSocket(currentSessionId);
+                switchTab('builder');
 
             } catch (err) {
                 alert("Upload failed: " + err.message);
@@ -230,8 +233,13 @@
                     renderSuggestions(data.suggestions || []);
                     if(data.draft_slides && data.draft_slides.length > 0) {
                         renderBlueprintPreview(data.draft_slides);
-                    } else if (data.content.includes("Session Reset")) {
-                        // Clear right panels if the backend signals a pipeline state reset
+                    }
+                    // IMMEDIATE CHART VISUALIZATION INTERCEPT PIPELINE
+                    if (data.chart_img) {
+                        document.getElementById("previewImage").src = "data:image/png;base64," + data.chart_img;
+                        document.getElementById("chartCard").style.display = "flex";
+                    }
+                    if (data.content.includes("Session Reset")) {
                         document.getElementById('blueprintDeskCard').style.display = "none";
                         document.getElementById('chartCard').style.display = "none";
                         document.getElementById('downloadBtn').style.display = "none";
@@ -256,12 +264,16 @@
                 block.className = "blueprint-item";
                 const bulletsText = slide.bullet_points.join("\n");
                 
+                // Mount explicit manual save elements side-by-side with localized content regeneration actions
                 block.innerHTML = `
                     <label>Slide ${sIdx} Title</label>
                     <input type="text" id="edit-title-${sIdx}" value="${slide.title}">
-                    <label style="margin-top:4px;">Bullet Points (One per line)</label>
+                    <label style="margin-top:4px;">Bullet Points</label>
                     <textarea id="edit-bullets-${sIdx}" rows="4">${bulletsText}</textarea>
-                    <button class="btn btn-primary" style="padding:4px 8px; font-size:11px; margin-top:4px; align-self:flex-end; background:var(--primary);" onclick="saveSlideDirect(${sIdx})">💾 Save Changes</button>
+                    <div class="card-actions">
+                        <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="regenerateSlideDirect(${sIdx})">🔄 Regenerate Content</button>
+                        <button class="btn btn-primary" style="padding:4px 8px; font-size:11px; background:var(--primary);" onclick="saveSlideDirect(${sIdx})">💾 Save Changes</button>
+                    </div>
                 `;
                 stack.appendChild(block);
             });
@@ -277,6 +289,17 @@
                     slide_index: sIdx,
                     title: titleValue,
                     bullet_points: bulletsValue
+                }));
+            }
+        }
+
+        // TRIGGER PACKET FOR PER-PAGE REGENERATION
+        function regenerateSlideDirect(sIdx) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                document.getElementById(`edit-title-${sIdx}`).value = "Regenerating page elements...";
+                ws.send(JSON.stringify({
+                    type: "regenerate_slide",
+                    slide_index: sIdx
                 }));
             }
         }
