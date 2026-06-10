@@ -74,6 +74,16 @@
         input[type="text"].chat-field { flex: 1; padding: 10px 16px; border: 1px solid var(--border); border-radius: 6px; outline: none; }
         input[type="text"].chat-field:focus { border-color: var(--primary); }
         #chartCard img { width: 100%; height: auto; border-radius: 4px; border: 1px solid var(--border); margin-top: 8px; }
+
+        /* --- PROCESSING ANIMATION CSS STYLES --- */
+        .thinking-bubble { display: flex; gap: 4px; align-items: center; padding: 12px 16px; background: #f8fafc; border-left: 3px solid var(--primary); border-radius: 6px; align-self: flex-start; max-width: 85%; }
+        .thinking-dot { width: 6px; height: 6px; background: var(--text-muted); border-radius: 50%; animation: bouncingDots 1.4s infinite ease-in-out both; }
+        .thinking-dot:nth-child(1) { animation-delay: -0.32s; }
+        .thinking-dot:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes bouncingDots {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1.0); }
+        }
     </style>
 </head>
 <body>
@@ -155,6 +165,28 @@
             if(ws) { ws.close(); ws = null; }
         }
 
+        // --- PROCESSING ANIMATION MANAGEMENT HOOKS ---
+        function showThinkingAnimation(label) {
+            removeThinkingAnimation();
+            const history = document.getElementById("chatHistory");
+            const div = document.createElement("div");
+            div.className = "thinking-bubble";
+            div.id = "chatProcessingLoader";
+            div.innerHTML = `
+                <div class="thinking-dot"></div>
+                <div class="thinking-dot"></div>
+                <div class="thinking-dot"></div>
+                <span style="margin-left: 8px; font-size: var(--font-xs); color: var(--text-muted); font-weight:500;">${label}...</span>
+            `;
+            history.appendChild(div);
+            history.scrollTop = history.scrollHeight;
+        }
+
+        function removeThinkingAnimation() {
+            const el = document.getElementById("chatProcessingLoader");
+            if (el) el.remove();
+        }
+
         async function processUpload() {
             const fileInput = document.getElementById('fileInput').files[0];
             if (!fileInput) return alert("Please select a file.");
@@ -165,7 +197,7 @@
             if (sheetSelect.style.display === "none") {
                 clearSessionUI();
             }
-            btn.innerText = "Profiling..."; btn.disabled = true;
+            btn.innerText = "Profiling Data Matrix..."; btn.disabled = true;
 
             const formData = new FormData();
             formData.append("file", fileInput);
@@ -217,8 +249,6 @@
                 appendMessage("ai-msg", data.initial_message);
                 renderSuggestions(data.suggestions);
                 initWebSocket(currentSessionId);
-                
-                // FIXED: Removed automated page tab switch here to stay on the data view page upon upload completion
 
             } catch (err) {
                 alert("Upload failed: " + err.message);
@@ -230,6 +260,9 @@
             const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
             ws = new WebSocket(`${protocol}//${window.location.host}/ws/chat/${sessionId}`);
             ws.onmessage = function(event) {
+                // Intercept server responses and close active animations
+                removeThinkingAnimation();
+
                 const data = JSON.parse(event.data);
                 if (data.type === "message") {
                     appendMessage("ai-msg", data.content);
@@ -269,7 +302,7 @@
                 let layoutSpecificHTML = "";
                 
                 if (slide.layout_type === "variance_analysis") {
-                    frameworkBadge = `<div class="framework-badge">📈 VARIANCE ANALYSIS ACTIVE</div>`;
+                    frameworkBadge = `<div class="framework-badge">`📈 VARIANCE ANALYSIS ACTIVE</div>`;
                     let rowsHTML = "<tr><th>Metric</th><th>Target</th><th>Actual</th><th>Var</th><th>%</th></tr>";
                     slide.variance_data.forEach(v => {
                         rowsHTML += `<tr><td>${v.metric_name}</td><td>${v.baseline}</td><td>${v.actual}</td><td>${v.deviation}</td><td>${v.percentage}</td></tr>`;
@@ -336,6 +369,7 @@
 
         function regenerateSlideDirect(sIdx) {
             if (ws && ws.readyState === WebSocket.OPEN) {
+                showThinkingAnimation("Regenerating slide layout content");
                 ws.send(JSON.stringify({ type: "regenerate_slide", slide_index: sIdx }));
             }
         }
@@ -344,7 +378,18 @@
             const input = document.getElementById("chatInput");
             const text = input.value.trim();
             if (!text || !ws) return;
+            
             appendMessage("user-msg", text);
+            
+            // Check current input intent to change loading label context text dynamically
+            let actionLabel = "Thinking";
+            if (text.toLowerCase().includes("compile") || text.toLowerCase().includes("approve")) {
+                actionLabel = "Compiling widescreen PowerPoint elements";
+            } else if (text.toLowerCase().includes("graph") || text.toLowerCase().includes("chart")) {
+                actionLabel = "Rendering matplotlib analytical charts";
+            }
+            
+            showThinkingAnimation(actionLabel);
             ws.send(JSON.stringify({ type: "chat", content: text }));
             input.value = "";
             document.getElementById("suggestionsBar").style.display = "none";
