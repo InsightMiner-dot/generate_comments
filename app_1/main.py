@@ -91,19 +91,15 @@ async def chat_websocket(websocket: WebSocket, session_id: str):
             elif payload.get("type") == "regenerate_slide":
                 target_idx = payload.get("slide_index")
                 regen_prompt = f"""
-                You are a granular text re-drafting assistant. Regenerate a high-density slide layout index {target_idx}.
-                Dataset Foundations: {current_state.get('data_summary')}
+                You are a granular analytical template builder re-drafting Slide Index {target_idx}.
+                Dataset Foundations Summary Profile: {current_state.get('data_summary')}
                 Target Audience Context: {current_state.get('persona')}
-                Core Topic Frame: {current_state.get('topics')}
+                Core Topic Frame Scenario: {current_state.get('topics')}
                 """
                 new_slide_content = llm.with_structured_output(SlideContent).invoke([SystemMessage(content=regen_prompt)])
                 for s in slides:
                     if s.get("slide_index") == target_idx:
-                        s["title"] = new_slide_content.title
-                        s["bullet_points"] = new_slide_content.bullet_points
-                        s["layout_type"] = new_slide_content.layout_type
-                        s["table_headers"] = new_slide_content.table_headers
-                        s["table_rows"] = new_slide_content.table_rows
+                        s.update(new_slide_content.model_dump())
                         break
                 app_engine.update_state(config, {"draft_slides": slides})
                 await websocket.send_json({"type": "message", "content": f"🔄 **Slide {target_idx} successfully contextually re-drafted.**", "suggestions": ["Approve Plan & Compile"], "draft_slides": slides})
