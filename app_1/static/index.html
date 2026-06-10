@@ -3,88 +3,110 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Enterprise Insights Platform</title>
+    <title>Enterprise Insights Engine</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         /* --- Enterprise Design System --- */
         :root {
-            --bg-dark: #0f172a;        /* Sleek dark sidebar */
-            --bg-main: #f8fafc;        /* App background */
-            --surface: #ffffff;        /* Card background */
-            --border: #e2e8f0;
-            --text-main: #1e293b;
-            --text-muted: #64748b;
-            --accent: #2563eb;         /* Professional Blue */
-            --accent-hover: #1d4ed8;
+            --bg-dark: #09090b;        
+            --bg-main: #ffffff;        
+            --surface: #f4f4f5;        
+            --border: #e4e4e7;
+            --text-main: #09090b;
+            --text-muted: #71717a;
+            --accent: #18181b;         
+            --accent-hover: #27272a;
+            --primary: #2563eb;
             --danger: #ef4444;
+            --font-xs: 12px;
             --font-sm: 13px;
             --font-md: 14px;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: var(--font-md); color: var(--text-main); background: var(--bg-main); display: flex; height: 100vh; overflow: hidden; }
+        body { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-size: var(--font-sm); color: var(--text-main); background: var(--bg-main); display: flex; height: 100vh; overflow: hidden; }
 
         /* --- Sidebar Navigation --- */
-        .sidebar { width: 220px; background: var(--bg-dark); color: #cbd5e1; display: flex; flex-direction: column; border-right: 1px solid #1e293b; }
-        .sidebar-header { padding: 20px; font-weight: 600; font-size: 15px; color: white; border-bottom: 1px solid #1e293b; display: flex; align-items: center; gap: 8px; }
-        .nav-items { padding: 10px 0; flex: 1; }
-        .nav-item { padding: 10px 20px; cursor: pointer; font-size: var(--font-sm); transition: 0.2s; display: flex; align-items: center; gap: 10px; border-left: 3px solid transparent; }
-        .nav-item:hover { background: #1e293b; color: white; }
-        .nav-item.active { background: #1e293b; color: white; border-left-color: var(--accent); }
+        .sidebar { width: 240px; background: var(--bg-dark); color: #a1a1aa; display: flex; flex-direction: column; border-right: 1px solid #27272a; }
+        .brand { padding: 20px; font-weight: 600; font-size: var(--font-md); color: white; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #27272a; }
+        .nav-items { padding: 15px 0; flex: 1; display: flex; flex-direction: column; gap: 5px; }
+        .nav-item { padding: 8px 20px; cursor: pointer; font-size: var(--font-sm); font-weight: 500; transition: 0.2s; border-left: 2px solid transparent; }
+        .nav-item:hover { color: white; }
+        .nav-item.active { background: #18181b; color: white; border-left-color: var(--primary); }
+        .nav-item.locked { opacity: 0.4; cursor: not-allowed; }
 
         /* --- Main Content Area --- */
-        .main-view { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-        .header { height: 50px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 20px; font-weight: 500; font-size: var(--font-sm); }
-        .content { flex: 1; overflow-y: auto; padding: 20px; display: none; }
-        .content.active { display: flex; flex-direction: column; gap: 20px; }
+        .main-view { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--bg-main); }
+        .header { height: 55px; border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 24px; font-weight: 600; font-size: var(--font-md); background: white; }
+        
+        .content { flex: 1; overflow-y: auto; padding: 24px; display: none; flex-direction: column; gap: 24px; }
+        .content.active { display: flex; }
 
-        /* --- Compact File Uploader --- */
-        .upload-bar { display: flex; gap: 10px; background: var(--surface); padding: 15px; border: 1px solid var(--border); border-radius: 6px; align-items: center; }
-        .file-input-wrapper { flex: 1; display: flex; align-items: center; gap: 10px; }
-        input[type="file"] { font-size: var(--font-sm); }
-        .btn { padding: 6px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; font-size: var(--font-sm); font-weight: 500; cursor: pointer; transition: 0.2s; color: var(--text-main); }
-        .btn:hover:not(:disabled) { background: #f1f5f9; }
-        .btn-primary { background: var(--accent); color: white; border-color: var(--accent); }
-        .btn-primary:hover:not(:disabled) { background: var(--accent-hover); color: white; }
-        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        /* --- UI Components --- */
+        .btn { padding: 8px 16px; border-radius: 6px; font-size: var(--font-sm); font-weight: 500; cursor: pointer; transition: 0.15s; border: 1px solid transparent; }
+        .btn-outline { background: white; border-color: var(--border); color: var(--text-main); }
+        .btn-outline:hover:not(:disabled) { background: var(--surface); }
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-        /* --- Data Quality Metrics Grid --- */
-        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; display: none; }
-        .metric-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 15px; }
-        .metric-label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
-        .metric-value { font-size: 20px; font-weight: 600; color: var(--text-main); }
+        /* --- Tab 1: Data Hub --- */
+        .upload-panel { display: flex; align-items: center; gap: 15px; padding: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+        input[type="file"] { font-size: var(--font-sm); color: var(--text-muted); }
+        
+        .metrics-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; display: none; }
+        .metric-card { padding: 16px; border: 1px solid var(--border); border-radius: 8px; background: white; }
+        .metric-label { font-size: var(--font-xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+        .metric-value { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; }
         .metric-value.warning { color: var(--danger); }
 
-        /* --- Dense Data Table --- */
-        .table-container { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; overflow-x: auto; overflow-y: hidden; display: none; }
-        table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }
-        th, td { padding: 8px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
-        th { background: #f8fafc; font-weight: 500; color: var(--text-muted); border-bottom: 2px solid var(--border); position: sticky; top: 0; }
-        tr:hover { background: #f1f5f9; }
+        .table-container { border: 1px solid var(--border); border-radius: 8px; overflow: auto; display: none; height: calc(100vh - 280px); }
+        table { width: 100%; border-collapse: collapse; text-align: left; font-size: var(--font-xs); white-space: nowrap; }
+        th, td { padding: 10px 16px; border-bottom: 1px solid var(--border); }
+        th { background: #fafafa; font-weight: 500; color: var(--text-muted); position: sticky; top: 0; border-bottom: 2px solid var(--border); z-index: 10; }
+        tr:hover { background: #fafafa; }
+
+        /* --- Tab 2: Presentation Builder (Dense Chat) --- */
+        .chat-container { flex: 1; border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; background: white; overflow: hidden; }
+        .chat-history { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+        
+        .message { padding: 12px 16px; border-radius: 6px; max-width: 85%; font-size: var(--font-sm); line-height: 1.5; }
+        .message p { margin-bottom: 8px; } .message p:last-child { margin-bottom: 0; }
+        .ai-msg { align-self: flex-start; background: #f8fafc; border-left: 3px solid var(--primary); color: var(--text-main); }
+        .user-msg { align-self: flex-end; background: var(--surface); border: 1px solid var(--border); color: var(--text-main); }
+
+        .chat-input-area { padding: 16px 24px; background: white; border-top: 1px solid var(--border); display: flex; gap: 12px; align-items: center; }
+        input[type="text"] { flex: 1; padding: 10px 16px; border: 1px solid var(--border); border-radius: 6px; font-size: var(--font-sm); outline: none; }
+        input[type="text"]:focus { border-color: var(--primary); }
+
+        #downloadBtn { display: none; width: 100%; justify-content: center; margin-top: 10px; background: #10b981; }
+        #downloadBtn:hover { background: #059669; }
     </style>
 </head>
 <body>
 
     <div class="sidebar">
-        <div class="sidebar-header">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
-            Data Engine
+        <div class="brand">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+            Insights Engine
         </div>
         <div class="nav-items">
-            <div class="nav-item active" onclick="switchView('home')">1. Data Quality Hub</div>
-            <div class="nav-item" id="nav-builder" onclick="switchView('builder')" style="opacity: 0.5; cursor: not-allowed;">2. Presentation Builder</div>
+            <div class="nav-item active" id="nav-home" onclick="switchTab('home')">1. Data Quality Hub</div>
+            <div class="nav-item locked" id="nav-builder" onclick="switchTab('builder')">2. Presentation Builder</div>
+        </div>
+        
+        <div style="padding: 20px;">
+            <button class="btn btn-primary" id="downloadBtn" onclick="triggerDownload()">📥 Download Deck .PPTX</button>
         </div>
     </div>
 
     <div class="main-view">
-        <div class="header" id="page-title">Data Quality Hub</div>
+        <div class="header" id="headerTitle">Data Quality Hub</div>
 
         <div id="view-home" class="content active">
-            
-            <div class="upload-bar">
-                <div class="file-input-wrapper">
-                    <input type="file" id="fileInput" accept=".csv, .xlsx">
-                </div>
-                <button class="btn btn-primary" id="uploadBtn" onclick="uploadData()">Upload & Profile Data</button>
+            <div class="upload-panel">
+                <input type="file" id="fileInput" accept=".csv, .xlsx">
+                <button class="btn btn-primary" id="uploadBtn" onclick="processUpload()">Upload & Profile</button>
             </div>
 
             <div class="metrics-grid" id="metricsGrid">
@@ -97,46 +119,50 @@
             </div>
 
             <div class="table-container" id="tableContainer">
-                <table id="dataTable">
+                <table>
                     <thead id="tableHead"></thead>
                     <tbody id="tableBody"></tbody>
                 </table>
             </div>
-
         </div>
 
         <div id="view-builder" class="content">
-            <div style="padding: 20px; background: white; border: 1px solid #e2e8f0; border-radius: 6px;">
-                <h3 style="margin-bottom: 10px; font-size: 15px;">Conversational Builder</h3>
-                <p style="color: #64748b; font-size: 13px;">The chat interface will be implemented here in Step 2.</p>
+            <div class="chat-container">
+                <div class="chat-history" id="chatHistory">
+                    </div>
+                <div class="chat-input-area">
+                    <input type="text" id="chatInput" placeholder="Type your response to the assistant..." onkeypress="handleEnter(event)" disabled>
+                    <button class="btn btn-primary" id="sendBtn" onclick="sendChatMessage()" disabled>Send Message</button>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
+        let ws;
         let currentSessionId = null;
 
-        // View Switcher Logic
-        function switchView(viewName) {
-            if (viewName === 'builder' && !currentSessionId) return; // Prevent access before upload
-            
+        // UI Routing
+        function switchTab(tabId) {
+            const builderNav = document.getElementById('nav-builder');
+            if (tabId === 'builder' && builderNav.classList.contains('locked')) return;
+
             document.querySelectorAll('.content').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-            
-            document.getElementById(`view-${viewName}`).classList.add('active');
-            event.currentTarget.classList.add('active');
-            
-            document.getElementById('page-title').innerText = viewName === 'home' ? 'Data Quality Hub' : 'Presentation Builder';
+
+            document.getElementById(`view-${tabId}`).classList.add('active');
+            document.getElementById(`nav-${tabId}`).classList.add('active');
+            document.getElementById('headerTitle').innerText = tabId === 'home' ? 'Data Quality Hub' : 'Presentation Builder';
         }
 
-        // Data Upload & Profiling Logic
-        async function uploadData() {
+        // --- Step 1: Upload & Profiling ---
+        async function processUpload() {
             const fileInput = document.getElementById('fileInput').files[0];
-            if (!fileInput) return alert("Select a file to profile.");
+            if (!fileInput) return alert("Please select a valid CSV or XLSX file.");
 
-            const uploadBtn = document.getElementById('uploadBtn');
-            uploadBtn.innerText = "Profiling...";
-            uploadBtn.disabled = true;
+            const btn = document.getElementById('uploadBtn');
+            btn.innerText = "Profiling...";
+            btn.disabled = true;
 
             const formData = new FormData();
             formData.append("file", fileInput);
@@ -144,59 +170,100 @@
             try {
                 const response = await fetch("/api/upload", { method: "POST", body: formData });
                 const data = await response.json();
-                
+
+                if(data.error) throw new Error(data.error);
+
                 currentSessionId = data.session_id;
-                
-                // Populate Metrics
+
+                // Render Metrics
                 document.getElementById('metricsGrid').style.display = 'grid';
                 document.getElementById('m-rows').innerText = data.metrics.rows;
                 document.getElementById('m-cols').innerText = data.metrics.columns;
                 
-                const missingEl = document.getElementById('m-missing');
-                missingEl.innerText = data.metrics.missing_cells;
-                if(data.metrics.missing_cells > 0) missingEl.classList.add('warning');
+                const mCell = document.getElementById('m-missing');
+                mCell.innerText = data.metrics.missing_cells;
+                if(data.metrics.missing_cells > 0) mCell.classList.add('warning');
 
-                const dupesEl = document.getElementById('m-dupes');
-                dupesEl.innerText = data.metrics.duplicate_rows;
-                if(data.metrics.duplicate_rows > 0) dupesEl.classList.add('warning');
+                const mDupe = document.getElementById('m-dupes');
+                mDupe.innerText = data.metrics.duplicate_rows;
+                if(data.metrics.duplicate_rows > 0) mDupe.classList.add('warning');
 
                 document.getElementById('m-num').innerText = data.metrics.numeric_features;
                 document.getElementById('m-mem').innerText = data.metrics.memory_usage;
 
-                // Populate Table
+                // Render Data Table Preview
                 document.getElementById('tableContainer').style.display = 'block';
                 const thead = document.getElementById('tableHead');
                 const tbody = document.getElementById('tableBody');
                 
-                // Build Headers
-                let headerHTML = '<tr>';
-                data.columns.forEach(col => headerHTML += `<th>${col}</th>`);
-                headerHTML += '</tr>';
-                thead.innerHTML = headerHTML;
+                let hHTML = '<tr>'; data.columns.forEach(c => hHTML += `<th>${c}</th>`); hHTML += '</tr>';
+                thead.innerHTML = hHTML;
 
-                // Build Rows
-                let bodyHTML = '';
+                let bHTML = '';
                 data.preview.forEach(row => {
-                    bodyHTML += '<tr>';
-                    data.columns.forEach(col => {
-                        bodyHTML += `<td>${row[col]}</td>`;
-                    });
-                    bodyHTML += '</tr>';
+                    bHTML += '<tr>'; data.columns.forEach(c => bHTML += `<td>${row[c]}</td>`); bHTML += '</tr>';
                 });
-                tbody.innerHTML = bodyHTML;
+                tbody.innerHTML = bHTML;
 
-                uploadBtn.innerText = "Dataset Profiled ✅";
+                // Unlock Tab 2 and Initialize Chat
+                btn.innerText = "Data Ingested ✅";
+                const builderNav = document.getElementById('nav-builder');
+                builderNav.classList.remove('locked');
                 
-                // Unlock Presentation Builder Tab
-                const navBuilder = document.getElementById('nav-builder');
-                navBuilder.style.opacity = '1';
-                navBuilder.style.cursor = 'pointer';
+                document.getElementById("chatInput").disabled = false;
+                document.getElementById("sendBtn").disabled = false;
+                
+                appendMessage("ai-msg", data.initial_message);
+                initWebSocket(currentSessionId);
 
             } catch (err) {
-                alert("Error profiling dataset.");
-                uploadBtn.innerText = "Upload & Profile Data";
-                uploadBtn.disabled = false;
+                alert("Upload failed: " + err.message);
+                btn.innerText = "Upload & Profile";
+                btn.disabled = false;
             }
+        }
+
+        // --- Step 2: LangGraph Chat WebSocket ---
+        function initWebSocket(sessionId) {
+            const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+            ws = new WebSocket(`${protocol}//${window.location.host}/ws/chat/${sessionId}`);
+            
+            ws.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                if (data.type === "message") {
+                    appendMessage("ai-msg", data.content);
+                } else if (data.type === "ready") {
+                    document.getElementById("downloadBtn").style.display = "flex";
+                }
+            };
+        }
+
+        function sendChatMessage() {
+            const input = document.getElementById("chatInput");
+            const text = input.value.trim();
+            if (!text || !ws) return;
+
+            appendMessage("user-msg", text);
+            ws.send(text);
+            input.value = "";
+        }
+
+        function handleEnter(e) { if (e.key === 'Enter') sendChatMessage(); }
+
+        function appendMessage(className, text) {
+            const history = document.getElementById("chatHistory");
+            const div = document.createElement("div");
+            div.className = `message ${className}`;
+            
+            // Render markdown natively
+            div.innerHTML = className === "ai-msg" ? marked.parse(text) : text;
+            
+            history.appendChild(div);
+            history.scrollTop = history.scrollHeight;
+        }
+
+        function triggerDownload() {
+            if (currentSessionId) window.location.href = `/api/download/${currentSessionId}`;
         }
     </script>
 </body>
