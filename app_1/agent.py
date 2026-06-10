@@ -225,7 +225,7 @@ def process_wizard_step(state: PresentationState):
         elif "marketing" in p_lower:
             persona_pref = "Marketing Team (The Behavioralist): Focuses on segment matrices, customer dropoff trends. Prefers Funnel/Bar charts."
         else:
-            persona_pref = "Executive Board (The Strategist): Focuses on high-level macro trajectories, aggregate business KPI metrics. Prefers simplified trend lines."
+            persona_pref = "Executive Board (The Strategist): Focuses on high-level macro trajectories, corporate strategic trajectories. Prefers clear line/bar trendlines."
 
         prompt = f"Dataset Columns Schema: {state['schema_info']}\nAudience Guidelines Focus: {persona_pref}\nSuggest 3 contextually optimized visualizations based on columns."
         graphs = sugg_llm.invoke([SystemMessage(content=prompt)]).suggestions
@@ -329,7 +329,6 @@ def generate_presentation(state: PresentationState):
         
         l_type = raw_slide.get("layout_type")
         
-        # FIXED CONTRAST HOOK: VARIANCE ANALYSIS TABLE COMPILER (Light Cell Fill, Pure Black Text)
         if l_type == "variance_analysis" and raw_slide.get("variance_data"):
             v_data = raw_slide["variance_data"]
             table_shape = slide.shapes.add_table(len(v_data) + 1, 5, Inches(1.0), Inches(2.0), Inches(11.333), Inches(4.5)).table
@@ -349,7 +348,7 @@ def generate_presentation(state: PresentationState):
                     cell.fill.solid()
                     cell.fill.fore_color.rgb = RGBColor(*TABLE_CELL_BG)
                     p = cell.text_frame.paragraphs[0]
-                    p.font.color.rgb = RGBColor(*TEXT_DARK) # PURE BLACK TEXT FOR LIGHT TABLES CELLS CONTENT
+                    p.font.color.rgb = RGBColor(*TEXT_DARK) # PURE BLACK TEXT FOR LIGHT TABLES CELLS
                     p.font.size = Pt(13)
                 
                 p_cell = table_shape.cell(r_idx + 1, 4)
@@ -386,7 +385,6 @@ def generate_presentation(state: PresentationState):
             add_styled_text(r_tf, "⚡ Remediation Action Plan", 14, bold=True, color_rgb=(16, 185, 129), is_first=True)
             add_styled_text(r_tf, rc["remediation"], 15, bold=False, color_rgb=TEXT_LIGHT)
 
-        # FIXED CONTRAST HOOK: DATA GRID MATRIX TABLE COMPILER (Light Cell Fill, Pure Black Text)
         elif l_type == "table_grid" and raw_slide.get("table_headers"):
             headers = raw_slide["table_headers"]
             rows = raw_slide["table_rows"]
@@ -406,7 +404,7 @@ def generate_presentation(state: PresentationState):
                     cell.fill.solid()
                     cell.fill.fore_color.rgb = RGBColor(*TABLE_CELL_BG)
                     p = cell.text_frame.paragraphs[0]
-                    p.font.color.rgb = RGBColor(*TEXT_DARK) # PURE BLACK TEXT FOR LIGHT TABLES CELLS CONTENT
+                    p.font.color.rgb = RGBColor(*TEXT_DARK) # PURE BLACK TEXT FOR TABLES CONTENT
                     p.font.size = Pt(13)
         else:
             body_box = slide.shapes.add_textbox(Inches(1.0), Inches(1.8), Inches(11.333), Inches(5.0))
