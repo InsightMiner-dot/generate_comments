@@ -212,6 +212,13 @@ def generate_presentation(state: PresentationState):
     }
 
 # --- 4. State Machine Routing ---
+
+def start_router(state: PresentationState):
+    """Determines whether to run the initial ingestion or process the next wizard step."""
+    if state.get("current_step") == "init":
+        return "ingest_and_summarize"
+    return "process_wizard_step"
+
 def router(state: PresentationState):
     if state["current_step"] == "generating": return "generate_presentation"
     if state["current_step"] == "done": return END
@@ -222,11 +229,27 @@ workflow.add_node("ingest_and_summarize", ingest_and_summarize)
 workflow.add_node("process_wizard_step", process_wizard_step)
 workflow.add_node("generate_presentation", generate_presentation)
 
-workflow.add_edge(START, "ingest_and_summarize")
-workflow.add_edge("ingest_and_summarize", END) # Pause after init
+# Use dynamic start conditional router
+workflow.add_conditional_edges(
+    START,
+    start_router,
+    {
+        "ingest_and_summarize": "ingest_and_summarize",
+        "process_wizard_step": "process_wizard_step"
+    }
+)
 
-# When user inputs, we process step, then route either to generate or pause again
-workflow.add_conditional_edges("process_wizard_step", router, {"process_wizard_step": END, "generate_presentation": "generate_presentation", END: END})
+workflow.add_edge("ingest_and_summarize", END)
+
+workflow.add_conditional_edges(
+    "process_wizard_step", 
+    router, 
+    {
+        "process_wizard_step": END, 
+        "generate_presentation": "generate_presentation", 
+        END: END
+    }
+)
 workflow.add_edge("generate_presentation", END)
 
 memory = MemorySaver()
