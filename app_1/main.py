@@ -3,7 +3,7 @@ import uuid
 import io
 import pandas as pd
 from dotenv import load_dotenv
-from fastapi import FastAPI, UploadFile, File, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, UploadFile, File, WebSocket, WebSocketDisconnect, Form
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from langchain_core.messages import HumanMessage
@@ -16,14 +16,33 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root():
-    with open("static/index.html", "r") as f: return f.read()
+    with open("static/index.html", "r", encoding="utf-8") as f: return f.read()
 
 @app.post("/api/upload")
-async def upload_data(file: UploadFile = File(...)):
+async def upload_data(file: UploadFile = File(...), sheet_name: str = Form(None)):
     contents = await file.read()
-    df = pd.read_csv(io.BytesIO(contents)) if file.filename.endswith(".csv") else pd.read_excel(io.BytesIO(contents))
+    file_bytes = io.BytesIO(contents)
+    
+    # Check for multi-sheet workbooks
+    if file.filename.endswith(('.xlsx', '.xls')):
+        xl = pd.ExcelFile(file_bytes)
+        if len(xl.sheet_names) > 1 and not sheet_name:
+            return {
+                "requires_sheet_selection": True,
+                "sheets": xl.sheet_names
+            }
+        df = pd.read_excel(file_bytes, sheet_name=sheet_name if sheet_name else xl.sheet_names[0])
+    else:
+        df = pd.read_csv(file_bytes)
+        
     session_id = str(uuid.uuid4())
     
+    # Pre-clean ID columns on the metrics engine to secure qualitative analytics alignment
+    for col in df.columns:
+        col_lower = str(col).lower()
+        if any(kw in col_lower for kw in ['id', 'code', 'invoice', 'zip', 'phone', 'serial', 'sl']):
+            df[col] = df[col].astype(str)
+
     metrics = {
         "rows": f"{len(df):,}", "columns": len(df.columns),
         "missing_cells": int(df.isnull().sum().sum()),
@@ -72,7 +91,6 @@ async def chat_websocket(websocket: WebSocket, session_id: str):
                         bot_response = value["messages"][-1].content
                         suggs = value.get("suggestions", [])
                         
-                        # Fetch the dynamic state blueprint to stream downstream adjustments to client UI
                         current_state = app_engine.get_state(config).values
                         draft_slides = current_state.get("draft_slides", [])
                         
