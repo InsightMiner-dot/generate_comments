@@ -39,7 +39,7 @@ class SuggestionList(BaseModel):
 class SlideContent(BaseModel):
     slide_index: int = Field(description="Sequential index starting at 1")
     title: str = Field(description="Slide title capturing a concrete insight or conclusion.")
-    bullet_points: List[str] = Field(description="3-5 highly impactful bullets containing real data metrics/figures.")
+    bullet_points: List[str] = Field(description="3-5 impactful bullets containing real data metrics/figures.")
 
 class PresentationDeck(BaseModel):
     slides: List[SlideContent]
@@ -56,18 +56,14 @@ class PresentationState(TypedDict):
     schema_info: str
     data_summary: str
     dataframe_json: str  
-    # Wizard State
     current_step: str 
     suggestions: List[str]
-    # Gathered Parameters
     persona: str
     topics: str
     pages: str
     title: str
     graph_request: str
-    # Core Review Framework Data
     draft_slides: List[Dict[str, Any]]
-    # Outputs
     output_ready: bool
     final_pptx_bytes: bytes
     chart_img_base64: str
@@ -90,45 +86,46 @@ def add_styled_text(tf, text, size_pt, bold=False, color_rgb=NAVY_PRIMARY, is_fi
 # --- 3. Graph Nodes ---
 
 def ingest_and_summarize(state: PresentationState):
-    """Step 0: Dynamically processes the dataset matrix rows to build real data profiles."""
-    schema = state["schema_info"]
-    
-    # CRITICAL FIX: Load the real data matrix to pull actual values, limits, and metrics
+    """Step 0: Processes dataset using semantic type detection to isolate structural codes from math attributes."""
     df = pd.read_json(io.StringIO(state["dataframe_json"]))
     
+    # CORE FIX: Heuristic check to identify and cast semantic ID variables to qualitative strings
+    for col in df.columns:
+        col_lower = str(col).lower()
+        if any(kw in col_lower for kw in ['id', 'code', 'invoice', 'zip', 'phone', 'account', 'serial', 'sl', 'no.']):
+            df[col] = df[col].astype(str)
+            
     profile_summary = []
-    profile_summary.append(f"Total Rows Processed: {len(df)}, Total Variables: {len(df.columns)}")
+    profile_summary.append(f"Total Rows Processed: {len(df)}, Total Schema Fields: {len(df.columns)}")
     
-    # Isolate Numeric Features and compile statistical distributions
+    # Isolate legitimate numerical features
     num_cols = df.select_dtypes(include=['number']).columns.tolist()
     if num_cols:
-        profile_summary.append("\n--- Statistical Distributions (Metrics, Averages, Ranges) ---")
+        profile_summary.append("\n--- Statistical Distributions (True Math Metrics) ---")
         profile_summary.append(df[num_cols].describe().to_string())
         
-    # Isolate Categorical Features and extract core item distributions
+    # Categoricals and identifiers combined
     cat_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
     if cat_cols:
-        profile_summary.append("\n--- Categorical Attribute Distributions (Top Values) ---")
-        for col in cat_cols[:4]:  # Top 4 categorical metrics to safeguard prompt window limits
-            profile_summary.append(f"Column '{col}' Frequent Occurrences:\n{df[col].value_counts().head(3).to_string()}")
+        profile_summary.append("\n--- Nominal Variables & Identifier Attributes Distributions ---")
+        for col in cat_cols[:5]:
+            profile_summary.append(f"Field '{col}' Frequency Matrix:\n{df[col].value_counts().head(3).to_string()}")
             
-    profile_summary.append("\n--- Data Sample Frame Snapshot ---")
-    profile_summary.append(df.head(5).to_string())
-    
     compiled_profile = "\n".join(profile_summary)
     
     prompt = f"""
-    You are an expert Data Scientist and Executive Business Analyst. 
-    Analyze this raw statistical profile of the uploaded file and summarize the most critical numbers, records, milestones, averages, and findings:
+    You are an elite Business Intelligence Analyst. Review this statistical summary frame.
+    Note that identity variables like Invoice IDs have been filtered out of numerical averages to ensure mathematical accuracy.
     
+    Data Profile Matrix:
     {compiled_profile}
     
-    Provide a robust analysis summary. Highlight clear anomalies, performance ceilings, numeric metrics, or value concentrations.
+    Summarize major high-level findings, concentrations, totals, and outliers. Keep conclusions data-rich.
     """
     response = llm.invoke([SystemMessage(content=prompt)])
     
-    msg = (f"### 📊 Data Profile Analysis Compiled\n{response.content}\n\n"
-           "Let's build your presentation. **First, who is the target persona or audience?**")
+    msg = (f"### 📊 Cleaned Data Profile Analytics\n{response.content}\n\n"
+           "Presentation schema calibrated. **Who is the target audience for this report?**")
     
     return {
         "data_summary": response.content,
@@ -183,36 +180,31 @@ def process_wizard_step(state: PresentationState):
         }
 
     elif step == "graph":
-        # CRITICAL FIX: Force the layout generator to embed actual metrics into the presentation plan
         generation_prompt = f"""
-        You are an elite corporate slide content designer. Create a highly detailed, data-grounded presentation deck outline.
+        Create a presentation blueprint framework outline.
+        CRITICAL RULE: Embed real numerical metrics and specific facts from the file summary profile below. Do NOT use placeholder statements.
         
-        CRITICAL RULE: Do NOT use generic text or placeholder statements like 'Analyze metrics' or 'Review performance trends'. Instead, you MUST extract real metrics, numbers, milestones, values, and trends from the Data Profile Context below and embed them explicitly into the slide titles and bullet points.
-        
-        Data Profile Context:
+        Data Summary Profile Context:
         {state['data_summary']}
         
-        Presentation Blueprint Directives:
+        Presentation Blueprints Directives:
         - Title: {state['title']}
         - Target Audience: {state['persona']}
-        - Objective / Scenario Focus: {state['topics']}
-        - Target Length: {user_input} Slides
-        
-        Generate slide metadata. Make sure every single slide contains actual data insights from the file context.
+        - Core Objective: {state['topics']}
+        - Total Slide Count: {user_input} Slides
         """
         deck_draft = llm.with_structured_output(PresentationDeck).invoke([SystemMessage(content=generation_prompt)])
         slides_dict = [slide.model_dump() for slide in deck_draft.slides]
         
         msg = ("### 🛠️ Review Slide Deck Plan Blueprint\n"
-               "I have compiled the proposed layout configuration framework using your data points. "
                "Review the outline structure in the **Layout Blueprint Preview Panel** on the right side. "
-               "You can ask me to change specific details or approve directly.")
+               "You can modify any slide or bullet point by typing your changes below, or proceed by approving the plan.")
         
         return {
             "graph_request": user_input,
             "current_step": "review_slides",
             "draft_slides": slides_dict,
-            "suggestions": ["Approve Plan & Compile", "Make it more concise", "Add a slide summary"],
+            "suggestions": ["Approve Plan & Compile", "Make headings punchier", "Add a slide summary"],
             "messages": [AIMessage(content=msg)]
         }
 
@@ -225,17 +217,13 @@ def process_wizard_step(state: PresentationState):
             }
         else:
             edit_prompt = f"""
-            You are a rigorous layout blueprint modifier. You modify existing slide blueprints while keeping real data elements intact.
+            You are an interactive slide blueprint modifier.
+            Foundation Data Metrics Context: {state['data_summary']}
+            Current Slide Structure Array Layout: {json.dumps(state.get('draft_slides', []))}
             
-            Data Profile Foundation:
-            {state['data_summary']}
-
-            Current Draft Slide Blueprint Configuration:
-            {json.dumps(state.get('draft_slides', []))}
-
-            User Modification Command: "{user_input}"
+            User Mutation Command: "{user_input}"
             
-            Modify the structural layout array according to the instructions. Ensure every slide bullet remains grounded in data points from the file profile context.
+            Reconstruct the PresentationDeck slides data model matching the request. Maintain metrics and unchanged content.
             """
             updated_deck = llm.with_structured_output(PresentationDeck).invoke([SystemMessage(content=edit_prompt)])
             slides_dict = [slide.model_dump() for slide in updated_deck.slides]
@@ -247,7 +235,7 @@ def process_wizard_step(state: PresentationState):
             }
 
 def generate_presentation(state: PresentationState):
-    """Final Step: Generates the actual PPTX based strictly on the approved data-rich blueprint."""
+    """Final Step: Renders professional charts and widescreen PPTX file streams."""
     graph_prompt = f"Schema: {state['schema_info']}\nUser requested graph: {state['graph_request']}\nDetermine chart config."
     chart_spec = llm.with_structured_output(ChartSpecification).invoke([SystemMessage(content=graph_prompt)])
     
@@ -258,30 +246,49 @@ def generate_presentation(state: PresentationState):
     
     try:
         if "no graph" not in state['graph_request'].lower():
-            plt.figure(figsize=(7, 4.5))
-            ax = plt.gca()
+            # Modern styling adjustments for high-end matplotlib output
+            plt.rcParams['font.family'] = 'sans-serif'
+            plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'Segoe UI']
+            
+            fig, ax = plt.subplots(figsize=(7, 4.8), dpi=300)
             ax.spines['top'].set_visible(False)
             ax.spines['right'].set_visible(False)
+            ax.spines['left'].set_color('#cbd5e1')
+            ax.spines['bottom'].set_color('#cbd5e1')
+            
+            # Draw underlying clean workspace grid lines
+            ax.set_axisbelow(True)
+            ax.yaxis.grid(True, color='#f1f5f9', linestyle='-', linewidth=1)
+            
+            sample_df = df.head(10).copy()
+            # If columns are semantic qualitative codes, format appropriately
+            sample_df[chart_spec.x_column] = sample_df[chart_spec.x_column].astype(str)
             
             if chart_spec.chart_type == 'bar':
-                df.head(10).plot(kind='bar', x=chart_spec.x_column, y=chart_spec.y_column, ax=ax, color="#2563eb", width=0.6)
+                bars = ax.bar(sample_df[chart_spec.x_column], sample_df[chart_spec.y_column], color="#2563eb", width=0.55, edgecolor='none')
+                # Draw discrete numerical metric labels straight on top of columns
+                for bar in bars:
+                    yval = bar.get_height()
+                    ax.text(bar.get_x() + bar.get_width()/2, yval + (yval * 0.01), f"{yval:,.0f}", ha='center', va='bottom', fontsize=8, color='#475569', weight='bold')
             elif chart_spec.chart_type == 'scatter':
-                df.plot(kind='scatter', x=chart_spec.x_column, y=chart_spec.y_column, ax=ax, color="#ef4444", s=50)
+                ax.scatter(sample_df[chart_spec.x_column], sample_df[chart_spec.y_column], color="#ef4444", s=70, alpha=0.8, edgecolors='white', linewidths=1)
             else:
-                df.head(10).plot(kind='line', x=chart_spec.x_column, y=chart_spec.y_column, ax=ax, color="#2563eb", linewidth=2.5, marker='o')
+                ax.plot(sample_df[chart_spec.x_column], sample_df[chart_spec.y_column], color="#2563eb", linewidth=3, marker='o', markersize=6, markerfacecolor='white', markeredgewidth=2)
                 
-            plt.title(chart_spec.chart_title, fontweight='bold', fontsize=12, pad=15, color="#0F172A")
-            plt.xticks(rotation=45, ha='right')
+            ax.set_title(chart_spec.chart_title, fontweight='bold', fontsize=13, pad=18, color="#0F172A", loc='left')
+            plt.xticks(rotation=35, ha='right', fontsize=9, color='#475569')
+            plt.yticks(fontsize=9, color='#475569')
             plt.tight_layout()
+            
             plt.savefig(chart_bytes, format='png', dpi=300, transparent=True)
             chart_bytes.seek(0)
             chart_base64 = base64.b64encode(chart_bytes.getvalue()).decode('utf-8')
             plt.close()
             has_plot = True
     except Exception as e:
-        print(f"Graph Error: {e}")
+        print(f"Enhanced Plotting Engine Exception: {e}")
 
-    # Build PPTX with Widescreen configuration
+    # Build PPTX 16:9 file structures
     prs = Presentation()
     prs.slide_width = Inches(13.333)
     prs.slide_height = Inches(7.5)
@@ -317,9 +324,9 @@ def generate_presentation(state: PresentationState):
         tf_title.word_wrap = True
         add_styled_text(tf_title, chart_spec.chart_title, 32, bold=True, color_rgb=NAVY_PRIMARY, is_first=True)
         
-        slide.shapes.add_picture(chart_bytes, Inches(0.8), Inches(1.8), width=Inches(6.5))
+        slide.shapes.add_picture(chart_bytes, Inches(0.6), Inches(1.8), width=Inches(6.8))
         
-        explanation_box = slide.shapes.add_textbox(Inches(7.6), Inches(1.8), Inches(4.8), Inches(4.8))
+        explanation_box = slide.shapes.add_textbox(Inches(7.8), Inches(1.8), Inches(4.8), Inches(4.8))
         tf_explain = explanation_box.text_frame
         tf_explain.word_wrap = True
         
@@ -335,10 +342,8 @@ def generate_presentation(state: PresentationState):
         "current_step": "done",
         "final_pptx_bytes": output_stream.getvalue(),
         "chart_img_base64": chart_base64,
-        "messages": [AIMessage(content="🎉 **Success!** Your presentation has been built with real, data-grounded metrics and widescreen formatting.")]
+        "messages": [AIMessage(content="🎉 **Success!** Your data-validated widescreen report is compiled and ready for download.")]
     }
-
-# --- 4. State Machine Routing ---
 
 def start_router(state: PresentationState):
     if state.get("current_step") == "init":
