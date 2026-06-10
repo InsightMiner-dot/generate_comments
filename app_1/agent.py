@@ -34,7 +34,7 @@ llm = AzureChatOpenAI(
 
 # --- 2. Data Models & State ---
 class SuggestionList(BaseModel):
-    suggestions: List[str] = Field(description="Exactly 3 short, distinct suggestions.")
+    suggestions: List[str] = Field(description="Exactly 3 short, contextually valid choices.")
 
 class SlideContent(BaseModel):
     slide_index: int = Field(description="Sequential index starting at 1")
@@ -46,9 +46,9 @@ class PresentationDeck(BaseModel):
 
 class ChartSpecification(BaseModel):
     chart_title: str = Field(description="Title of the chart")
-    x_column: str = Field(description="Exact column for X-axis from schema")
-    y_column: str = Field(description="Exact column for Y-axis from schema")
-    chart_type: str = Field(description="'bar', 'line', or 'scatter'")
+    x_column: str = Field(description="Exact column name for X-axis from dataset")
+    y_column: str = Field(description="Exact column name for Y-axis (or secondary axis if dual axis)")
+    chart_type: str = Field(description="'bar', 'line', 'scatter', 'histogram', 'boxplot', 'dual_axis', 'trendline'")
     key_takeaways: List[str] = Field(description="3 concrete bullet points explaining what this specific data trend means.")
 
 class PresentationState(TypedDict):
@@ -88,7 +88,7 @@ def add_styled_text(tf, text, size_pt, bold=False, color_rgb=NAVY_PRIMARY, is_fi
 def ingest_and_summarize(state: PresentationState):
     df = pd.read_json(io.StringIO(state["dataframe_json"]))
     
-    # Cast identity columns to qualitative string features to guarantee data cleaning safety
+    # Cast identity columns to qualitative string features to protect metrics accuracy
     for col in df.columns:
         col_lower = str(col).lower()
         if any(kw in col_lower for kw in ['id', 'code', 'invoice', 'zip', 'phone', 'account', 'serial', 'sl']):
@@ -127,7 +127,12 @@ def ingest_and_summarize(state: PresentationState):
     return {
         "data_summary": response.content,
         "current_step": "persona",
-        "suggestions": ["Financial Analysts", "Executive Board", "Marketing Team"],
+        "suggestions": [
+            "Data Analyst (The Gatekeeper)", 
+            "Financial Analyst (The Monetizer)", 
+            "Marketing Team (The Behavioralist)", 
+            "Executive Board (The Strategist)"
+        ],
         "messages": [AIMessage(content=msg)]
     }
 
@@ -137,6 +142,25 @@ def process_wizard_step(state: PresentationState):
     schema = state["schema_info"]
     
     sugg_llm = llm.with_structured_output(SuggestionList)
+
+    # RESTART LOOP LIFECYCLE CONTROLLER
+    if step == "done":
+        if "yes" in user_input.lower() or "restart" in user_input.lower() or "new session" in user_input.lower():
+            return {
+                "current_step": "persona",
+                "draft_slides": [],
+                "output_ready": False,
+                "chart_img_base64": "",
+                "suggestions": [
+                    "Data Analyst (The Gatekeeper)", 
+                    "Financial Analyst (The Monetizer)", 
+                    "Marketing Team (The Behavioralist)", 
+                    "Executive Board (The Strategist)"
+                ],
+                "messages": [AIMessage(content="🔄 **Session Reset!** Starting a fresh presentation construction cycle.\n\n**Who is the target audience or persona for this new deck?**")]
+            }
+        else:
+            return {"messages": [AIMessage(content="Presentation workspace locked. Type **'Restart'** anytime to clear state and start over.")]}
 
     if step == "persona":
         prompt = f"Given data summary profile:\n{state['data_summary']}\nAnd persona: {user_input}\nSuggest 3 key analytical topics or scenarios."
@@ -167,33 +191,66 @@ def process_wizard_step(state: PresentationState):
         }
 
     elif step == "title":
-        prompt = f"Data Summary Context: {state['data_summary']}\nSuggest 3 relevant analytical graphs matching these statistics."
+        # INTENTIONAL CHART SELECTION RULES ENGINE
+        p_lower = str(state.get("persona", "")).lower()
+        if "data analyst" in p_lower:
+            persona_pref = "Prefers: Histograms (distribution), Box Plots (outliers/spread), or Scatter Plots (correlations)."
+        elif "financial" in p_lower:
+            persona_pref = "Prefers: Bar Charts (performance vs budgets), or Dual-Axis Line Charts (cost vs revenue)."
+        elif "marketing" in p_lower:
+            persona_pref = "Prefers: Bar Charts (segment metrics/ROI), or Line Charts (trends over cohorts)."
+        else:
+            persona_pref = "Prefers: Simplified Trend Lines (overall growth trajectory), or clean Bar Charts (KPI health aggregates)."
+
+        prompt = f"""
+        Dataset Schema Info:
+        {schema}
+        
+        Audience Profile Framework:
+        {state['persona']} -> {persona_pref}
+        
+        Based on valid columns present in this schema, suggest exactly 3 real, valid charts that matplotlib can generate.
+        Format example: "Histogram of [Numeric Column]" or "Scatter plot of [Col A] vs [Col B]".
+        """
         graphs = sugg_llm.invoke([SystemMessage(content=prompt)]).suggestions
         return {
             "title": user_input,
             "current_step": "graph",
             "suggestions": graphs + ["No Graph Needed"],
-            "messages": [AIMessage(content=f"Great title! What kind of **graph or visualization** would you like to add?")]
+            "messages": [AIMessage(content=f"Great title! Based on your target persona and schema columns, what **graph or visualization** should we add?")]
         }
 
     elif step == "graph":
-        # AUDIENCE ADAPTATION ENGINE LAYER
-        persona_lower = str(state.get("persona", "")).lower()
-        if any(w in persona_lower for w in ["analyst", "analytics", "scientist", "engineer", "data"]):
+        # CONFIGURING THE FOUR TARGET AUDIENCE STRATEGIES
+        p_lower = str(state.get("persona", "")).lower()
+        if "data analyst" in p_lower:
             audience_guardrail = """
-            CRITICAL DIRECTIVE: TARGET AUDIENCE IS A DATA ANALYST.
-            - Eliminate high-level observations, qualitative fluff, or basic introductory definitions.
-            - Slide titles must capture an absolute metric state or finding (e.g., 'Total Cost Peaked at $4.2M with 14% Variance' instead of 'Cost Optimization Overview').
-            - Every bullet point must include explicit figures, counts, ratios, math sample boundaries, or statistical limits extracted directly from the profile summary.
+            AUDIENCE FOCUS: DATA ANALYST (THE GATEKEEPER)
+            - Highly detailed content focused on statistical distributions, variance, data cleanliness, and pattern validation.
+            - Slide titles must state factual data insights directly (e.g., 'Variance Spiked by 14.2% across Q2 records').
+            - Every bullet point must leverage raw counts, limits, percentages, or validation metrics.
+            """
+        elif "financial" in p_lower:
+            audience_guardrail = """
+            AUDIENCE FOCUS: FINANCIAL ANALYST (THE MONETIZER)
+            - Focus completely on financial implications: profit margins, investment risk, operating costs, and cash flow variances.
+            - Relate quantitative numbers back to budget targets, revenue streams, and cost parameters.
+            """
+        elif "marketing" in p_lower:
+            audience_guardrail = """
+            AUDIENCE FOCUS: MARKETING TEAM (THE BEHAVIORALIST)
+            - Decode statistics into behavioral milestones, customer segmentation trends, engagement retention, or conversions.
+            - Highlight acquisition metrics, campaign returns, and performance channels.
             """
         else:
             audience_guardrail = """
-            CRITICAL DIRECTIVE: TARGET AUDIENCE IS GENERAL MANAGEMENT.
-            - Blend clear, factual quantitative data metrics with operational takeaways, business strategic insights, and summaries.
+            AUDIENCE FOCUS: EXECUTIVE BOARD (THE STRATEGIST)
+            - High-level, macro trajectories emphasizing strategic alignment, overall company health, and growth vectors.
+            - Keep bullets concise, dense with bottom-line business impacts, and clear action items.
             """
 
         generation_prompt = f"""
-        You are an expert slide deck content architect. Create a comprehensive presentation blueprint framework outline.
+        You are an expert slide deck architect. Create a comprehensive presentation blueprint layout outline.
         
         {audience_guardrail}
         
@@ -204,7 +261,7 @@ def process_wizard_step(state: PresentationState):
         - Title: {state['title']}
         - Target Audience: {state['persona']}
         - Core Objective: {state['topics']}
-        - Total Slide Count: {user_input} Slides
+        - Total Slide Count: {state['pages']} Slides
         """
         deck_draft = llm.with_structured_output(PresentationDeck).invoke([SystemMessage(content=generation_prompt)])
         slides_dict = [slide.model_dump() for slide in deck_draft.slides]
@@ -267,26 +324,37 @@ def generate_presentation(state: PresentationState):
             ax.spines['right'].set_visible(False)
             ax.spines['left'].set_color('#cbd5e1')
             ax.spines['bottom'].set_color('#cbd5e1')
-            
             ax.set_axisbelow(True)
             ax.yaxis.grid(True, color='#f1f5f9', linestyle='-', linewidth=1)
             
-            sample_df = df.head(10).copy()
-            sample_df[chart_spec.x_column] = sample_df[chart_spec.x_column].astype(str)
+            # Defensive validation against plotting empty columns or missing variables
+            x_col = chart_spec.x_column if chart_spec.x_column in df.columns else df.columns[0]
+            y_col = chart_spec.y_column if chart_spec.y_column in df.columns else df.select_dtypes(include=['number']).columns[0]
             
-            if chart_spec.chart_type == 'bar':
-                bars = ax.bar(sample_df[chart_spec.x_column], sample_df[chart_spec.y_column], color="#2563eb", width=0.55, edgecolor='none')
+            sample_df = df.head(12).copy()
+            sample_df[x_col] = sample_df[x_col].astype(str)
+            
+            c_type = chart_spec.chart_type.lower()
+            if 'histogram' in c_type:
+                ax.hist(df[y_col].dropna(), bins=10, color="#2563eb", edgecolor='white', width=0.8)
+            elif 'boxplot' in c_type:
+                ax.boxplot(sample_df[y_col].dropna(), patch_artist=True, boxprops=dict(facecolor="#eff6ff", color="#2563eb"), medianprops=dict(color="#ef4444"))
+            elif 'scatter' in c_type:
+                ax.scatter(sample_df[x_col], sample_df[y_col], color="#ef4444", s=70, alpha=0.8, edgecolors='white')
+            elif 'dual_axis' in c_type and len(df.select_dtypes(include=['number']).columns) > 1:
+                alt_y = df.select_dtypes(include=['number']).columns[1]
+                ax.plot(sample_df[x_col], sample_df[y_col], color="#2563eb", linewidth=2.5, marker='o')
+                ax2 = ax.twinx()
+                ax2.plot(sample_df[x_col], sample_df[alt_y].head(12), color="#10b981", linewidth=2.5, marker='s')
+                ax2.spines['top'].set_visible(False)
+            else: # Standard line or bar trendlines
+                bars = ax.bar(sample_df[x_col], sample_df[y_col], color="#2563eb", width=0.55)
                 for bar in bars:
                     yval = bar.get_height()
-                    ax.text(bar.get_x() + bar.get_width()/2, yval + (yval * 0.01), f"{yval:,.0f}", ha='center', va='bottom', fontsize=8, color='#475569', weight='bold')
-            elif chart_spec.chart_type == 'scatter':
-                ax.scatter(sample_df[chart_spec.x_column], sample_df[chart_spec.y_column], color="#ef4444", s=70, alpha=0.8, edgecolors='white', linewidths=1)
-            else:
-                ax.plot(sample_df[chart_spec.x_column], sample_df[chart_spec.y_column], color="#2563eb", linewidth=3, marker='o', markersize=6, markerfacecolor='white', markeredgewidth=2)
+                    if yval > 0: ax.text(bar.get_x() + bar.get_width()/2, yval + (yval * 0.01), f"{yval:,.0f}", ha='center', va='bottom', fontsize=7, color='#475569')
                 
-            ax.set_title(chart_spec.chart_title, fontweight='bold', fontsize=13, pad=18, color="#0F172A", loc='left')
-            plt.xticks(rotation=35, ha='right', fontsize=9, color='#475569')
-            plt.yticks(fontsize=9, color='#475569')
+            ax.set_title(chart_spec.chart_title, fontweight='bold', fontsize=12, pad=18, color="#0F172A", loc='left')
+            plt.xticks(rotation=35, ha='right', fontsize=8, color='#475569')
             plt.tight_layout()
             
             plt.savefig(chart_bytes, format='png', dpi=300, transparent=True)
@@ -295,7 +363,7 @@ def generate_presentation(state: PresentationState):
             plt.close()
             has_plot = True
     except Exception as e:
-        print(f"Enhanced Plotting Engine Exception: {e}")
+        print(f"Engine Plotting Exception: {e}")
 
     # Build PPTX 16:9 file structures
     prs = Presentation()
@@ -351,7 +419,8 @@ def generate_presentation(state: PresentationState):
         "current_step": "done",
         "final_pptx_bytes": output_stream.getvalue(),
         "chart_img_base64": chart_base64,
-        "messages": [AIMessage(content="🎉 **Success!** Your data-validated widescreen report is compiled and ready for download.")]
+        "suggestions": ["Yes, Start New Session"],
+        "messages": [AIMessage(content="🎉 **Success!** Your presentation has been generated. Would you like to restart and build another one?")]
     }
 
 def start_router(state: PresentationState):
@@ -361,7 +430,6 @@ def start_router(state: PresentationState):
 
 def router(state: PresentationState):
     if state["current_step"] == "generating": return "generate_presentation"
-    if state["current_step"] == "done": return END
     return "process_wizard_step"
 
 workflow = StateGraph(PresentationState)
@@ -371,7 +439,7 @@ workflow.add_node("generate_presentation", generate_presentation)
 
 workflow.add_conditional_edges(START, start_router, {"ingest_and_summarize": "ingest_and_summarize", "process_wizard_step": "process_wizard_step"})
 workflow.add_edge("ingest_and_summarize", END)
-workflow.add_conditional_edges("process_wizard_step", router, {"process_wizard_step": END, "generate_presentation": "generate_presentation", END: END})
+workflow.add_conditional_edges("process_wizard_step", router, {"process_wizard_step": END, "generate_presentation": "generate_presentation"})
 workflow.add_edge("generate_presentation", END)
 
 memory = MemorySaver()
