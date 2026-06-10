@@ -38,7 +38,7 @@
         th, td { padding: 10px 16px; border-bottom: 1px solid var(--border); }
         th { background: #fafafa; position: sticky; top: 0; border-bottom: 2px solid var(--border); }
 
-        /* Tab 2: Chat & Split Layout Preview */
+        /* Chat Workspace split window */
         .chat-layout { display: flex; gap: 20px; flex: 1; overflow: hidden; height: 100%; }
         .chat-container { flex: 1; border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; background: white; overflow: hidden; }
         .chat-history { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
@@ -46,10 +46,13 @@
         .ai-msg { align-self: flex-start; background: #f8fafc; border-left: 3px solid var(--primary); }
         .user-msg { align-self: flex-end; background: var(--surface); border: 1px solid var(--border); }
         
-        /* Visualization Preview Card Component */
-        .chart-preview-card { width: 340px; background: white; border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: none; flex-direction: column; gap: 12px; height: fit-content; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05); }
-        .card-header { font-weight: 600; font-size: var(--font-sm); display: flex; align-items: center; gap: 6px; color: var(--bg-dark); border-bottom: 1px solid var(--border); padding-bottom: 8px; }
-        .card-body img { width: 100%; height: auto; border-radius: 4px; border: 1px solid var(--border); background: #fafafa; }
+        /* Layout Blueprint Preview Container Panels */
+        .preview-desk-container { width: 400px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; height: 100%; }
+        .blueprint-card { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: none; flex-direction: column; gap: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05); }
+        .blueprint-title { font-weight: 600; font-size: var(--font-sm); color: var(--bg-dark); border-bottom: 1px solid var(--border); padding-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
+        .blueprint-item { padding: 10px; background: #fafafa; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 8px; }
+        .blueprint-item h4 { font-weight: 600; color: var(--primary); margin-bottom: 4px; }
+        .blueprint-item ul { padding-left: 16px; font-size: var(--font-xs); color: var(--text-muted); }
 
         .suggestions-bar { padding: 10px 24px; background: #fafafa; border-top: 1px solid var(--border); display: flex; gap: 8px; overflow-x: auto; }
         .suggestion-chip { padding: 6px 12px; background: white; border: 1px solid var(--border); border-radius: 16px; font-size: var(--font-xs); cursor: pointer; white-space: nowrap; transition: 0.2s; color: var(--primary); font-weight: 500; }
@@ -59,6 +62,7 @@
         input[type="text"] { flex: 1; padding: 10px 16px; border: 1px solid var(--border); border-radius: 6px; outline: none; }
         input[type="text"]:focus { border-color: var(--primary); }
         #downloadBtn { display: none; width: 100%; justify-content: center; margin-top: 10px; background: #10b981; }
+        #chartCard img { width: 100%; height: auto; border-radius: 4px; border: 1px solid var(--border); margin-top: 8px; }
     </style>
 </head>
 <body>
@@ -106,10 +110,15 @@
                     </div>
                 </div>
                 
-                <div class="chart-preview-card" id="chartCard">
-                    <div class="card-header">📊 Generated Visualization Preview</div>
-                    <div class="card-body">
-                        <img id="previewImage" src="" alt="Presentation Chart Preview">
+                <div class="preview-desk-container">
+                    <div class="blueprint-card" id="blueprintDeskCard">
+                        <div class="blueprint-title">🛠️ Layout Blueprint Outline</div>
+                        <div id="blueprintStack"></div>
+                    </div>
+
+                    <div class="blueprint-card" id="chartCard">
+                        <div class="blueprint-title">📊 Compiled Analytics Visual</div>
+                        <img id="previewImage" src="" alt="Compiled Output Graphic">
                     </div>
                 </div>
             </div>
@@ -185,17 +194,36 @@
                 if (data.type === "message") {
                     appendMessage("ai-msg", data.content);
                     renderSuggestions(data.suggestions || []);
+                    
+                    // Render or update live structural outline previews dynamically
+                    if(data.draft_slides && data.draft_slides.length > 0) {
+                        renderBlueprintPreview(data.draft_slides);
+                    }
                 } else if (data.type === "ready") {
                     document.getElementById("downloadBtn").style.display = "flex";
                     document.getElementById("suggestionsBar").style.display = "none";
-                    
-                    // Render image into the preview card deck if string payload is active
                     if (data.chart_img) {
                         document.getElementById("previewImage").src = "data:image/png;base64," + data.chart_img;
                         document.getElementById("chartCard").style.display = "flex";
                     }
                 }
             };
+        }
+
+        function renderBlueprintPreview(slides) {
+            const stack = document.getElementById("blueprintStack");
+            stack.innerHTML = "";
+            slides.forEach(slide => {
+                const block = document.createElement("div");
+                block.className = "blueprint-item";
+                
+                let bulletsHTML = "";
+                slide.bullet_points.forEach(bp => bulletsHTML += `<li>${bp}</li>`);
+                
+                block.innerHTML = `<h4>Slide ${slide.slide_index || '#'}: ${slide.title}</h4><ul>${bulletsHTML}</ul>`;
+                stack.appendChild(block);
+            });
+            document.getElementById("blueprintDeskCard").style.display = "flex";
         }
 
         function renderSuggestions(suggestions) {
