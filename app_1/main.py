@@ -130,7 +130,6 @@ async def clean_dataset_pipeline(session_id: str = Form(...), action: str = Form
 
 @app.post("/api/plot_lab")
 async def plot_insights_laboratory(session_id: str = Form(...), column: str = Form(...), plot_type: str = Form(...)):
-    """Generates explicit visual analytics plots for Page 1 Insights Lab frame."""
     if session_id not in SESSIONS_DB: return {"error": "Invalid workspace session context."}
     df = SESSIONS_DB[session_id]["df"]
     
@@ -145,7 +144,6 @@ async def plot_insights_laboratory(session_id: str = Form(...), column: str = Fo
             ax.boxplot(df[column].dropna(), patch_artist=True, boxprops=dict(facecolor="#eff6ff", color="#2563eb"))
             ax.set_title(f"Outlier Spread Boxplot: {column}", fontweight='bold', fontsize=10, color='#1e293b')
         else: 
-            # Categorical value counts distribution histogram bar plot execution track
             df[column].dropna().value_counts().head(15).plot(kind='bar', ax=ax, color="#38bdf8", width=0.6)
             ax.set_title(f"Distribution Counts: {column}", fontweight='bold', fontsize=10, color='#1e293b')
             
@@ -235,7 +233,10 @@ async def download_presentation(session_id: str):
     pptx_bytes = state.get("final_pptx_bytes")
     if not pptx_bytes: return {"error": "Presentation file structure stream not ready yet."}
     title = state.get("title", "Insight_Report").replace(" ", "_")
+    
+    # FIXED: Restored clean quotes parameter matching formats safely
     return StreamingResponse(
-        io.BytesIO(pptx_bytes), media_type=\"application/vnd.openxmlformats-officedocument.presentationml.presentation\",
+        io.BytesIO(pptx_bytes), 
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
         headers={"Content-Disposition": f"attachment; filename={title}.pptx"}
     )
