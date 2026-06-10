@@ -75,7 +75,6 @@
         input[type="text"].chat-field:focus { border-color: var(--primary); }
         #chartCard img { width: 100%; height: auto; border-radius: 4px; border: 1px solid var(--border); margin-top: 8px; }
 
-        /* --- PROCESSING ANIMATION CSS STYLES --- */
         .thinking-bubble { display: flex; gap: 4px; align-items: center; padding: 12px 16px; background: #f8fafc; border-left: 3px solid var(--primary); border-radius: 6px; align-self: flex-start; max-width: 85%; }
         .thinking-dot { width: 6px; height: 6px; background: var(--text-muted); border-radius: 50%; animation: bouncingDots 1.4s infinite ease-in-out both; }
         .thinking-dot:nth-child(1) { animation-delay: -0.32s; }
@@ -165,7 +164,6 @@
             if(ws) { ws.close(); ws = null; }
         }
 
-        // --- PROCESSING ANIMATION MANAGEMENT HOOKS ---
         function showThinkingAnimation(label) {
             removeThinkingAnimation();
             const history = document.getElementById("chatHistory");
@@ -260,7 +258,6 @@
             const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
             ws = new WebSocket(`${protocol}//${window.location.host}/ws/chat/${sessionId}`);
             ws.onmessage = function(event) {
-                // Intercept server responses and close active animations
                 removeThinkingAnimation();
 
                 const data = JSON.parse(event.data);
@@ -301,8 +298,9 @@
                 let frameworkBadge = "";
                 let layoutSpecificHTML = "";
                 
+                // FIXED: Escaped backtick/quote strings securely to protect page executions
                 if (slide.layout_type === "variance_analysis") {
-                    frameworkBadge = `<div class="framework-badge">`📈 VARIANCE ANALYSIS ACTIVE</div>`;
+                    frameworkBadge = '<div class="framework-badge">📈 VARIANCE ANALYSIS ACTIVE</div>';
                     let rowsHTML = "<tr><th>Metric</th><th>Target</th><th>Actual</th><th>Var</th><th>%</th></tr>";
                     slide.variance_data.forEach(v => {
                         rowsHTML += `<tr><td>${v.metric_name}</td><td>${v.baseline}</td><td>${v.actual}</td><td>${v.deviation}</td><td>${v.percentage}</td></tr>`;
@@ -310,7 +308,7 @@
                     layoutSpecificHTML = `<table class="blueprint-table-preview">${rowsHTML}</table>`;
                 } 
                 else if (slide.layout_type === "root_cause") {
-                    frameworkBadge = `<div class="framework-badge">🔍 ROOT CAUSE (5-WHYS) ACTIVE</div>`;
+                    frameworkBadge = '<div class="framework-badge">🔍 ROOT CAUSE (5-WHYS) ACTIVE</div>';
                     layoutSpecificHTML = `
                         <div style="font-size:11px; padding:6px; background:white; border:1px solid #cbd5e1; border-radius:4px;">
                             <strong>Symptom:</strong> ${slide.root_cause_data.symptom}<br>
@@ -319,7 +317,7 @@
                         </div>`;
                 }
                 else if(slide.layout_type === "table_grid" && slide.table_headers) {
-                    frameworkBadge = `<div class="framework-badge">📊 TABLE MATRIX ACTIVE</div>`;
+                    frameworkBadge = '<div class="framework-badge">📊 TABLE MATRIX ACTIVE</div>';
                     let headerRow = "<tr>";
                     slide.table_headers.forEach(h => headerRow += `<th>${h}</th>`);
                     headerRow += "</tr>";
@@ -381,7 +379,6 @@
             
             appendMessage("user-msg", text);
             
-            // Check current input intent to change loading label context text dynamically
             let actionLabel = "Thinking";
             if (text.toLowerCase().includes("compile") || text.toLowerCase().includes("approve")) {
                 actionLabel = "Compiling widescreen PowerPoint elements";
