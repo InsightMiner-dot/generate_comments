@@ -34,7 +34,6 @@ llm = AzureChatOpenAI(
 
 # --- 2. Advanced Data Models & State ---
 class SuggestionList(BaseModel):
-    """Fixed: Added missing SuggestionList model to handle wizard button actions securely."""
     suggestions: List[str] = Field(description="Exactly 3 short, contextually valid choices.")
 
 class VarianceRow(BaseModel):
@@ -112,6 +111,7 @@ def apply_dark_background(slide):
     bg_shape.fill.fore_color.rgb = RGBColor(*DARK_BG)
     bg_shape.line.fill.background()
 
+# --- Chart Generation Helper ---
 def generate_chart_img_base64(state: PresentationState, graph_request_str: str) -> tuple[str, Any]:
     if not graph_request_str or "no graph" in graph_request_str.lower():
         return "", None
