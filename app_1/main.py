@@ -95,6 +95,8 @@ async def chat_websocket(websocket: WebSocket, session_id: str):
                 Dataset Foundations Summary Profile: {current_state.get('data_summary')}
                 Target Audience Context: {current_state.get('persona')}
                 Core Topic Frame Scenario: {current_state.get('topics')}
+                
+                You MUST identify if this slide template benefits from being standard bullets, an Excel data matrix, a Variance Analysis table, or a Root Cause 5-whys map structure. Return the fully populated object schema.
                 """
                 new_slide_content = llm.with_structured_output(SlideContent).invoke([SystemMessage(content=regen_prompt)])
                 for s in slides:
