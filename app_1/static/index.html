@@ -50,12 +50,10 @@
         .blueprint-card { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: none; flex-direction: column; gap: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05); }
         .blueprint-title { font-weight: 600; font-size: var(--font-sm); color: var(--bg-dark); border-bottom: 1px solid var(--border); padding-bottom: 8px; }
         
-        /* Direct Layout Editing Components UI fields */
         .blueprint-item { padding: 12px; background: #fafafa; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px; }
         .blueprint-item label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; }
         .blueprint-item input[type="text"] { width: 100%; padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; font-weight: 600; outline: none; }
         .blueprint-item textarea { width: 100%; padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 12px; font-family: inherit; resize: vertical; outline: none; line-height: 1.4; }
-        .blueprint-item input:focus, .blueprint-item textarea:focus { border-color: var(--primary); }
 
         .suggestions-bar { padding: 10px 24px; background: #fafafa; border-top: 1px solid var(--border); display: flex; gap: 8px; overflow-x: auto; }
         .suggestion-chip { padding: 6px 12px; background: white; border: 1px solid var(--border); border-radius: 16px; font-size: var(--font-xs); cursor: pointer; white-space: nowrap; transition: 0.2s; color: var(--primary); font-weight: 500; }
@@ -116,7 +114,7 @@
                 
                 <div class="preview-desk-container">
                     <div class="blueprint-card" id="blueprintDeskCard">
-                        <div class="blueprint-title">🛠️ Interactive Blueprint Blueprint Editor</div>
+                        <div class="blueprint-title">🛠️ Interactive Blueprint Editor</div>
                         <div id="blueprintStack"></div>
                     </div>
                     <div class="blueprint-card" id="chartCard">
@@ -141,12 +139,28 @@
             document.getElementById('headerTitle').innerText = tabId === 'home' ? 'Data Quality Hub' : 'Presentation Builder';
         }
 
+        function clearSessionUI() {
+            // CRITICAL RESET HOOK: Resets all components when a new file upload is initiated
+            document.getElementById('chatHistory').innerHTML = "";
+            document.getElementById('blueprintStack').innerHTML = "";
+            document.getElementById('blueprintDeskCard').style.display = "none";
+            document.getElementById('chartCard').style.display = "none";
+            document.getElementById('downloadBtn').style.display = "none";
+            if(ws) { ws.close(); ws = null; }
+        }
+
         async function processUpload() {
             const fileInput = document.getElementById('fileInput').files[0];
             if (!fileInput) return alert("Please select a file.");
             
             const btn = document.getElementById('uploadBtn');
             const sheetSelect = document.getElementById('sheetSelect');
+            
+            // Only trigger visual UI cleanup if this is the initial sheet processing step
+            if (sheetSelect.style.display === "none") {
+                clearSessionUI();
+            }
+
             btn.innerText = "Profiling..."; btn.disabled = true;
 
             const formData = new FormData();
@@ -216,10 +230,15 @@
                     renderSuggestions(data.suggestions || []);
                     if(data.draft_slides && data.draft_slides.length > 0) {
                         renderBlueprintPreview(data.draft_slides);
+                    } else if (data.content.includes("Session Reset")) {
+                        // Clear right panels if the backend signals a pipeline state reset
+                        document.getElementById('blueprintDeskCard').style.display = "none";
+                        document.getElementById('chartCard').style.display = "none";
+                        document.getElementById('downloadBtn').style.display = "none";
                     }
                 } else if (data.type === "ready") {
                     document.getElementById("downloadBtn").style.display = "flex";
-                    document.getElementById("suggestionsBar").style.display = "none";
+                    renderSuggestions(data.suggestions || []);
                     if (data.chart_img) {
                         document.getElementById("previewImage").src = "data:image/png;base64," + data.chart_img;
                         document.getElementById("chartCard").style.display = "flex";
@@ -235,17 +254,13 @@
                 const sIdx = slide.slide_index;
                 const block = document.createElement("div");
                 block.className = "blueprint-item";
-                
-                // Unroll points by newline break strings to form structured editable configurations
                 const bulletsText = slide.bullet_points.join("\n");
                 
                 block.innerHTML = `
                     <label>Slide ${sIdx} Title</label>
                     <input type="text" id="edit-title-${sIdx}" value="${slide.title}">
-                    
                     <label style="margin-top:4px;">Bullet Points (One per line)</label>
                     <textarea id="edit-bullets-${sIdx}" rows="4">${bulletsText}</textarea>
-                    
                     <button class="btn btn-primary" style="padding:4px 8px; font-size:11px; margin-top:4px; align-self:flex-end; background:var(--primary);" onclick="saveSlideDirect(${sIdx})">💾 Save Changes</button>
                 `;
                 stack.appendChild(block);
@@ -256,9 +271,7 @@
         function saveSlideDirect(sIdx) {
             const titleValue = document.getElementById(`edit-title-${sIdx}`).value;
             const bulletsValue = document.getElementById(`edit-bullets-${sIdx}`).value.split("\n").filter(b => b.trim() !== "");
-            
             if (ws && ws.readyState === WebSocket.OPEN) {
-                // Route direct sync changes payload event packets to backend state machines
                 ws.send(JSON.stringify({
                     type: "direct_edit",
                     slide_index: sIdx,
