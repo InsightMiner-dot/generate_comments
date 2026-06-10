@@ -1,5 +1,6 @@
 import os
 import io
+import json
 import base64
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -36,18 +37,19 @@ class SuggestionList(BaseModel):
     suggestions: List[str] = Field(description="Exactly 3 short, distinct suggestions.")
 
 class SlideContent(BaseModel):
+    slide_index: int = Field(description="Sequential index starting at 1")
     title: str = Field(description="Slide title")
     bullet_points: List[str] = Field(description="3-5 impactful bullet points")
+
+class PresentationDeck(BaseModel):
+    slides: List[SlideContent]
 
 class ChartSpecification(BaseModel):
     chart_title: str = Field(description="Title of the chart")
     x_column: str = Field(description="Exact column for X-axis from schema")
     y_column: str = Field(description="Exact column for Y-axis from schema")
     chart_type: str = Field(description="'bar', 'line', or 'scatter'")
-    key_takeaways: List[str] = Field(description="3 context-aware bullets explaining what this chart demonstrates from data summary.")
-
-class PresentationDeck(BaseModel):
-    slides: List[SlideContent]
+    key_takeaways: List[str] = Field(description="3 contextual bullets explaining what this chart demonstrates.")
 
 class PresentationState(TypedDict):
     messages: Annotated[list, add_messages]
@@ -63,6 +65,8 @@ class PresentationState(TypedDict):
     pages: str
     title: str
     graph_request: str
+    # Core Review Framework Data
+    draft_slides: List[Dict[str, Any]]
     # Outputs
     output_ready: bool
     final_pptx_bytes: bytes
@@ -74,7 +78,6 @@ BLUE_ACCENT = (37, 99, 235)     # #2563EB
 SLATE_TEXT = (71, 85, 105)     # #475569
 
 def add_styled_text(tf, text, size_pt, bold=False, color_rgb=NAVY_PRIMARY, is_first=False, space_after=12):
-    """Helper utility to ensure uniform formatting and block text overflow."""
     p = tf.paragraphs[0] if is_first else tf.add_paragraph()
     p.text = text
     p.font.name = 'Segoe UI'
@@ -122,7 +125,7 @@ def process_wizard_step(state: PresentationState):
         return {
             "topics": user_input,
             "current_step": "pages",
-            "suggestions": ["5 Slides", "10 Slides", "15 Slides"],
+            "suggestions": ["3 Slides", "5 Slides", "7 Slides"],
             "messages": [AIMessage(content=f"Excellent. How many **pages/slides** do you want?")]
         }
 
@@ -147,33 +150,63 @@ def process_wizard_step(state: PresentationState):
         }
 
     elif step == "graph":
+        # Gather all information and generate draft structure before finalizing
+        generation_prompt = f"""
+        Create a detailed step-by-step structural blueprint deck outline based on:
+        Schema: {schema}
+        Summary Context: {state['data_summary']}
+        Title Chosen: {state['title']}
+        Audience: {state['persona']}
+        Key Topics: {state['topics']}
+        Target Slides Count: {user_input}
+        Generate slide metadata with titles and explicit bullets for each slide.
+        """
+        deck_draft = llm.with_structured_output(PresentationDeck).invoke([SystemMessage(content=generation_prompt)])
+        slides_dict = [slide.model_dump() for slide in deck_draft.slides]
+        
+        msg = ("### 🛠️ Review Slide Deck Plan Blueprint\n"
+               "I have compiled the proposed layout configuration framework. "
+               "Review the outline structure in the **Layout Blueprint Preview Panel** on the right side. "
+               "You can ask me to change specific details (e.g., *'Change Title of slide 2'*) or approve directly.")
+        
         return {
             "graph_request": user_input,
-            "current_step": "approve",
-            "suggestions": ["Approve & Generate", "Restart"],
-            "messages": [AIMessage(content=f"Graph noted: {user_input}.\n\n✅ Everything is ready! Click **Approve & Generate** to build the PowerPoint.")]
+            "current_step": "review_slides",
+            "draft_slides": slides_dict,
+            "suggestions": ["Approve Plan & Compile", "Rewrite Slide 1", "Add more details"],
+            "messages": [AIMessage(content=msg)]
         }
 
-    elif step == "approve":
-        if "approve" in user_input.lower() or "generate" in user_input.lower():
-            return {"current_step": "generating", "suggestions": [], "messages": [AIMessage(content="⚙️ Generating your presentation...")]}
+    elif step == "review_slides":
+        if "approve" in user_input.lower() or "compile" in user_input.lower():
+            return {
+                "current_step": "generating", 
+                "suggestions": [], 
+                "messages": [AIMessage(content="⚙️ Compilation approved. Building widescreen layouts and generating charts...")]
+            }
         else:
-            return {"messages": [AIMessage(content="Waiting for approval. Reply 'Approve' to proceed.")]}
+            # Edit request loop logic processing modifications directly against the current state blueprint
+            edit_prompt = f"""
+            You are a rigorous layout blueprint architecture modifier.
+            Current Draft Slide Blueprint Configuration:
+            {json.dumps(state.get('draft_slides', []))}
+
+            User Modification Command: "{user_input}"
+            Modify the JSON schema layout plan strictly conforming to instructions. Keep other structural elements pristine.
+            """
+            updated_deck = llm.with_structured_output(PresentationDeck).invoke([SystemMessage(content=edit_prompt)])
+            slides_dict = [slide.model_dump() for slide in updated_deck.slides]
+            
+            return {
+                "draft_slides": slides_dict,
+                "suggestions": ["Approve Plan & Compile"],
+                "messages": [AIMessage(content=f"🔄 Blueprint updated with request: *\"{user_input}\"*. Please review the changes in the preview panel.")]
+            }
 
 def generate_presentation(state: PresentationState):
-    prompt = f"""
-    Create a structured slide deck based on:
-    Schema: {state['schema_info']}
-    Summary: {state['data_summary']}
-    Title: {state['title']}
-    Audience: {state['persona']}
-    Key Topics: {state['topics']}
-    Target Slides: {state['pages']}
-    """
-    deck_data = llm.with_structured_output(PresentationDeck).invoke([SystemMessage(content=prompt)])
-    
-    # Generate Graph Specs alongside analytical explanation bullets
-    graph_prompt = f"Schema: {state['schema_info']}\nSummary Context: {state['data_summary']}\nUser requested graph: {state['graph_request']}\nDetermine chart config and provide key analysis insights."
+    """Final Step: Generates the actual PPTX based strictly on the approved draft_slides schema state."""
+    # Generate Graph Specs based on user request
+    graph_prompt = f"Schema: {state['schema_info']}\nUser requested graph: {state['graph_request']}\nDetermine chart config."
     chart_spec = llm.with_structured_output(ChartSpecification).invoke([SystemMessage(content=graph_prompt)])
     
     df = pd.read_json(io.StringIO(state["dataframe_json"]))
@@ -184,7 +217,6 @@ def generate_presentation(state: PresentationState):
     try:
         if "no graph" not in state['graph_request'].lower():
             plt.figure(figsize=(7, 4.5))
-            # Clean minimalistic plotting design
             ax = plt.gca()
             ax.spines['top'].set_visible(False)
             ax.spines['right'].set_visible(False)
@@ -211,7 +243,7 @@ def generate_presentation(state: PresentationState):
     prs = Presentation()
     prs.slide_width = Inches(13.333)
     prs.slide_height = Inches(7.5)
-    blank_layout = prs.slide_layouts[6] # completely blank layout layout to enforce rule bounds
+    blank_layout = prs.slide_layouts[6] 
 
     # --- Slide 1: Title Slide ---
     slide = prs.slides.add_slide(blank_layout)
@@ -219,44 +251,40 @@ def generate_presentation(state: PresentationState):
     tf = tx_box.text_frame
     tf.word_wrap = True
     add_styled_text(tf, state.get('title', 'Generated Report'), 44, bold=True, color_rgb=NAVY_PRIMARY, is_first=True, space_after=18)
-    add_styled_text(tf, f"Target Target Audience: {state.get('persona', 'Enterprise Stakeholders')}", 20, bold=False, color_rgb=BLUE_ACCENT)
+    add_styled_text(tf, f"Prepared for Audience: {state.get('persona', 'Enterprise Stakeholders')}", 20, bold=False, color_rgb=BLUE_ACCENT)
 
-    # --- Core Slides Processing ---
-    for slide_data in deck_data.slides:
+    # --- Process Approved Slide Blueprint Content ---
+    for raw_slide in state.get("draft_slides", []):
         slide = prs.slides.add_slide(blank_layout)
-        # Main Header Box
         title_box = slide.shapes.add_textbox(Inches(1.0), Inches(0.6), Inches(11.333), Inches(1.0))
         tf_title = title_box.text_frame
         tf_title.word_wrap = True
-        add_styled_text(tf_title, slide_data.title, 32, bold=True, color_rgb=NAVY_PRIMARY, is_first=True)
+        add_styled_text(tf_title, raw_slide.get("title", "Slide"), 32, bold=True, color_rgb=NAVY_PRIMARY, is_first=True)
         
-        # Content Body Box
         body_box = slide.shapes.add_textbox(Inches(1.0), Inches(1.8), Inches(11.333), Inches(5.0))
         tf_body = body_box.text_frame
         tf_body.word_wrap = True
-        for idx, bullet in enumerate(slide_data.bullet_points):
+        for idx, bullet in enumerate(raw_slide.get("bullet_points", [])):
             add_styled_text(tf_body, f"•  {bullet}", 16, bold=False, color_rgb=SLATE_TEXT, is_first=(idx == 0), space_after=14)
                 
-    # --- Side-By-Side Visual Insights Slide ---
+    # --- Visual Insight Slide ---
     if has_plot:
         slide = prs.slides.add_slide(blank_layout)
-        
-        # Title
         title_box = slide.shapes.add_textbox(Inches(1.0), Inches(0.6), Inches(11.333), Inches(1.0))
         tf_title = title_box.text_frame
         tf_title.word_wrap = True
         add_styled_text(tf_title, chart_spec.chart_title, 32, bold=True, color_rgb=NAVY_PRIMARY, is_first=True)
         
-        # Left Side Placement: Chart Graphics Frame
+        # Left Picture Frame Placement
         slide.shapes.add_picture(chart_bytes, Inches(0.8), Inches(1.8), width=Inches(6.5))
         
-        # Right Side Placement: Narrative and Analysis Framework
+        # Right Narrative Frame Placement
         explanation_box = slide.shapes.add_textbox(Inches(7.6), Inches(1.8), Inches(4.8), Inches(4.8))
         tf_explain = explanation_box.text_frame
         tf_explain.word_wrap = True
         
         add_styled_text(tf_explain, "Analytical Takeaways", 20, bold=True, color_rgb=BLUE_ACCENT, is_first=True, space_after=14)
-        for idx, insight in enumerate(chart_spec.key_takeaways):
+        for insight in chart_spec.key_takeaways:
             add_styled_text(tf_explain, f"• {insight}", 15, bold=False, color_rgb=SLATE_TEXT, is_first=False, space_after=12)
         
     output_stream = io.BytesIO()
@@ -267,7 +295,7 @@ def generate_presentation(state: PresentationState):
         "current_step": "done",
         "final_pptx_bytes": output_stream.getvalue(),
         "chart_img_base64": chart_base64,
-        "messages": [AIMessage(content="🎉 **Success!** Your modern 16:9 widescreen presentation is compiled with side-by-side graphical explanation views.")]
+        "messages": [AIMessage(content="🎉 **Success!** Your finalized presentation layout is fully processed and ready for download.")]
     }
 
 # --- 4. State Machine Routing ---
