@@ -33,7 +33,6 @@ async def upload_data(file: UploadFile = File(...), sheet_name: str = Form(None)
         
     session_id = str(uuid.uuid4())
     
-    # Pre-clean IDs to protect profiling metrics
     for col in df.columns:
         col_lower = str(col).lower()
         if any(kw in col_lower for kw in ['id', 'code', 'invoice', 'zip', 'phone', 'serial', 'sl']):
@@ -80,10 +79,8 @@ async def chat_websocket(websocket: WebSocket, session_id: str):
     config = {"configurable": {"thread_id": session_id}}
     try:
         while True:
-            # Parse structured packet payloads
             payload = await websocket.receive_json()
             
-            # ROUTING VECTOR 1: Direct structural state blueprint update request
             if payload.get("type") == "direct_edit":
                 current_state = app_engine.get_state(config).values
                 slides = list(current_state.get("draft_slides", []))
@@ -95,18 +92,16 @@ async def chat_websocket(websocket: WebSocket, session_id: str):
                         s["bullet_points"] = payload.get("bullet_points")
                         break
                 
-                # Push direct manual sync straight to current checkpoint memory
                 app_engine.update_state(config, {"draft_slides": slides})
                 
                 await websocket.send_json({
                     "type": "message",
-                    "content": f"✨ **Slide {target_idx} updated manually.** Modifications are synchronized with the state machine checkpoint.",
+                    "content": f"✨ **Slide {target_idx} updated manually.**",
                     "suggestions": ["Approve Plan & Compile"],
                     "draft_slides": slides
                 })
                 continue
             
-            # ROUTING VECTOR 2: Standard natural language conversational request
             elif payload.get("type") == "chat":
                 user_input = payload.get("content")
                 for event in app_engine.stream({"messages": [HumanMessage(content=user_input)]}, config):
@@ -128,7 +123,11 @@ async def chat_websocket(websocket: WebSocket, session_id: str):
                 state = app_engine.get_state(config).values
                 if state.get("output_ready"):
                     chart_base64 = state.get("chart_img_base64", "")
-                    await websocket.send_json({"type": "ready", "chart_img": chart_base64})
+                    await websocket.send_json({
+                        "type": "ready", 
+                        "chart_img": chart_base64,
+                        "suggestions": ["Yes, Start New Session"]
+                    })
     except WebSocketDisconnect: pass
 
 @app.get("/api/download/{session_id}")
