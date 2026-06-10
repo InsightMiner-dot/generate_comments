@@ -33,6 +33,10 @@ llm = AzureChatOpenAI(
 )
 
 # --- 2. Advanced Data Models & State ---
+class SuggestionList(BaseModel):
+    """Fixed: Added missing SuggestionList model to handle wizard button actions securely."""
+    suggestions: List[str] = Field(description="Exactly 3 short, contextually valid choices.")
+
 class VarianceRow(BaseModel):
     metric_name: str = Field(description="Name of the parameter being evaluated")
     baseline: str = Field(description="Budget, baseline, or targeted baseline figure")
@@ -220,7 +224,6 @@ def process_wizard_step(state: PresentationState):
                 Example output format: df = df[df['Cost'] > 100]"""
                 
                 code_ans = llm.invoke([SystemMessage(content=code_prompt)]).content.strip().replace("`", "")
-                
                 local_env = {"df": df, "pd": pd}
                 exec(code_ans, {}, local_env)
                 transformed_df = local_env["df"]
@@ -233,7 +236,6 @@ def process_wizard_step(state: PresentationState):
                     "messages": [AIMessage(content=f"⚙️ **Transformation Applied:** `{code_ans}`\nRows Remaining: {len(transformed_df):,}. Click **Proceed to Target Persona** to continue.")]
                 }
             except Exception as e:
-                # Robust Safe Graceful Fallback Interception Boundary
                 return {
                     "suggestions": ["Proceed to Target Persona", "Remove missing cells"], 
                     "messages": [AIMessage(content=f"⚠️ **Transformation Notice:** Failed to evaluate expression context securely (*{str(e)}*). Please check column availability or click **Proceed to Target Persona** directly.")]
@@ -387,7 +389,6 @@ def generate_presentation(state: PresentationState):
                 cell.text_frame.paragraphs[0].font.bold = True
                 
             for r_idx, row in enumerate(v_data):
-                # FIX: Applied explicit font configuration attributes to row metrics to secure high-contrast legibility against dark background canvases
                 for c_idx, val in enumerate([row["metric_name"], row["baseline"], row["actual"], row["deviation"]]):
                     cell = table_shape.cell(r_idx + 1, c_idx)
                     cell.text = str(val)
@@ -441,7 +442,6 @@ def generate_presentation(state: PresentationState):
                 for c_idx, cell_val in enumerate(row_data):
                     cell = table_shape.cell(r_idx + 1, c_idx)
                     cell.text = str(cell_val)
-                    # FIX: Explicit color mapping for grid cell texts
                     cell.text_frame.paragraphs[0].font.color.rgb = RGBColor(*TEXT_LIGHT)
                     cell.text_frame.paragraphs[0].font.size = Pt(13)
         else:
