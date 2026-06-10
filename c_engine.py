@@ -29,15 +29,26 @@ st.set_page_config(
     layout="wide"
 )
 
-if not os.getenv("AZURE_OPENAI_API_KEY") or not os.getenv("AZURE_OPENAI_ENDPOINT"):
+# User's Dynamic Azure OpenAI Configuration
+azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+azure_api_key = os.getenv("AZURE_OPENAI_KEY")
+azure_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT")
+azure_api_version = os.getenv("AZURE_OPENAI_API_VERSION")
+model_name = os.getenv("MODEL_NAME")
+
+if not azure_api_key or not azure_endpoint:
     st.error("Missing Azure OpenAI credentials. Please verify your `.env` file configuration.")
     st.stop()
 
 # Initialize LLM
 llm = AzureChatOpenAI(
-    azure_deployment="gpt-4o-mini", 
-    api_version="2024-02-15-preview",
-    temperature=0.2
+    azure_endpoint=azure_endpoint,
+    api_key=azure_api_key,
+    api_version=azure_api_version,
+    deployment_name=azure_deployment,
+    model=model_name,
+    temperature=0.0,
+    max_tokens=500,
 )
 
 # ==========================================
@@ -145,32 +156,32 @@ def generate_presentation_content(state: PresentationState):
     structured_llm = llm.with_structured_output(PresentationDeck)
     deck_data = structured_llm.invoke([SystemMessage(content=prompt)])
     
-    # Visualization Rendering
     df = pd.read_json(io.StringIO(state["dataframe_json"]))
     chart_spec = deck_data.chart_suggestion
     chart_bytes = io.BytesIO()
     has_plot = False
     
     try:
-        plt.figure(figsize=(7, 4.5))
+        plt.figure(figsize=(8, 4.5))
         if chart_spec.chart_type == 'bar':
-            df.head(10).plot(kind='bar', x=chart_spec.x_column, y=chart_spec.y_column, ax=plt.gca())
+            df.head(10).plot(kind='bar', x=chart_spec.x_column, y=chart_spec.y_column, ax=plt.gca(), color="#2c3e50")
         elif chart_spec.chart_type == 'scatter':
-            df.plot(kind='scatter', x=chart_spec.x_column, y=chart_spec.y_column, ax=plt.gca())
+            df.plot(kind='scatter', x=chart_spec.x_column, y=chart_spec.y_column, ax=plt.gca(), color="#e74c3c")
         else:
-            df.head(10).plot(kind='line', x=chart_spec.x_column, y=chart_spec.y_column, ax=plt.gca())
+            df.head(10).plot(kind='line', x=chart_spec.x_column, y=chart_spec.y_column, ax=plt.gca(), linewidth=2.5)
             
-        plt.title(chart_spec.chart_title, fontsize=12, fontweight='bold')
+        plt.title(chart_spec.chart_title, fontsize=14, fontweight='bold')
         plt.xticks(rotation=45, ha='right')
+        plt.grid(axis='y', linestyle='--', alpha=0.7)
         plt.tight_layout()
-        plt.savefig(chart_bytes, format='png', dpi=200)
+        plt.savefig(chart_bytes, format='png', dpi=300)
         chart_bytes.seek(0)
         plt.close()
         has_plot = True
     except Exception as chart_err:
         print(f"Chart render warning: {chart_err}")
 
-    # PPTX Generation
+    # Build PPTX File
     prs = Presentation()
     
     # Title Slide
@@ -178,7 +189,7 @@ def generate_presentation_content(state: PresentationState):
     slide.shapes.title.text = params.get('title', 'Data Engine Report')
     slide.placeholders[1].text = f"Prepared for: {params.get('persona', 'Management')}"
     
-    # Content Slides
+    # Bullet Content Slides
     bullet_layout = prs.slide_layouts[1]
     for slide_data in deck_data.slides:
         slide = prs.slides.add_slide(bullet_layout)
@@ -191,11 +202,11 @@ def generate_presentation_content(state: PresentationState):
                 p = tf.add_paragraph()
                 p.text = bullet
                 
-    # Visualization Slide
+    # Insert Generated Graph Slide
     if has_plot:
         slide = prs.slides.add_slide(prs.slide_layouts[5])
         slide.shapes.title.text = f"Visualized Insights: {chart_spec.chart_title}"
-        slide.shapes.add_picture(chart_bytes, Inches(1.5), Inches(2.0), width=Inches(7.0))
+        slide.shapes.add_picture(chart_bytes, Inches(1.0), Inches(2.0), width=Inches(8.0))
         
     output_stream = io.BytesIO()
     prs.save(output_stream)
@@ -205,7 +216,7 @@ def generate_presentation_content(state: PresentationState):
     
     return {
         "output_ready": True,
-        "messages": [AIMessage(content="🚀 **Your Presentation is Ready!** Head to the sidebar to download your file.")]
+        "messages": [AIMessage(content="✅ **Success!** Your presentation has been fully compiled with the embedded data visualization.")]
     }
 
 def route_step(state: PresentationState):
@@ -218,8 +229,6 @@ def route_step(state: PresentationState):
 # ==========================================
 # 5. Persistent Memory & Engine Compilation
 # ==========================================
-# @st.cache_resource is critical here. It prevents Streamlit from wiping 
-# the LangGraph MemorySaver instance on every user interaction.
 @st.cache_resource
 def compile_engine_workflow():
     builder = StateGraph(PresentationState)
@@ -230,17 +239,10 @@ def compile_engine_workflow():
     builder.add_edge(START, "ingest_and_summarize")
     builder.add_edge("ingest_and_summarize", "gather_parameters")
     builder.add_conditional_edges(
-        "gather_parameters",
-        route_step,
-        {
-            "gather_parameters": END,
-            "generate_presentation_content": "generate_presentation_content",
-            END: END
-        }
+        "gather_parameters", route_step,
+        {"gather_parameters": END, "generate_presentation_content": "generate_presentation_content", END: END}
     )
     builder.add_edge("generate_presentation_content", END)
-    
-    # Bind the in-memory checkpointer to the cached graph
     return builder.compile(checkpointer=MemorySaver())
 
 workflow_engine = compile_engine_workflow()
@@ -250,9 +252,8 @@ workflow_engine = compile_engine_workflow()
 # ==========================================
 st.title("📊 Multi-Horizon Data Profiler & Presentation Generator")
 
-# Initialize robust session variables
 if "thread_id" not in st.session_state:
-    st.session_state["thread_id"] = "persistent_session_v1"
+    st.session_state["thread_id"] = "persistent_session_final"
 if "chat_history" not in st.session_state:
     st.session_state["chat_history"] = []
 if "file_processed" not in st.session_state:
@@ -260,7 +261,6 @@ if "file_processed" not in st.session_state:
 if "final_pptx_bytes" not in st.session_state:
     st.session_state["final_pptx_bytes"] = None
 
-# This config binds the current Streamlit session to the LangGraph memory thread
 config = {"configurable": {"thread_id": st.session_state["thread_id"]}}
 
 # --- Sidebar ---
@@ -288,7 +288,6 @@ with st.sidebar:
                     "messages": []
                 }
                 
-                # Stream the initial kickoff
                 for event in workflow_engine.stream(initial_state, config):
                     for value in event.values():
                         if "messages" in value:
@@ -299,16 +298,6 @@ with st.sidebar:
             except Exception as e:
                 st.error(f"Error handling file parsing: {e}")
 
-    if st.session_state["final_pptx_bytes"]:
-        st.success("PowerPoint Ready!")
-        st.download_button(
-            label="📥 Download Presentation Deck",
-            data=st.session_state["final_pptx_bytes"],
-            file_name="Automated_Insight_Deck.pptx",
-            mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            use_container_width=True
-        )
-        
     if st.button("Reset Workspace Session", use_container_width=True):
         st.session_state.clear()
         st.rerun()
@@ -328,64 +317,97 @@ if st.session_state["file_processed"]:
         st.subheader("Data Quality Audit Summary")
         col1, col2, col3 = st.columns(3)
         
-        with col1:
-            missing_count = df.isnull().sum().sum()
-            st.metric("Missing Target Values", missing_count, delta=f"{'Action Needed' if missing_count > 0 else 'Clean Data'}")
-        with col2:
-            duplicate_count = df.duplicated().sum()
-            st.metric("Duplicate Row Footprints", duplicate_count)
-        with col3:
-            numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
-            st.metric("Numeric Features Quantified", len(numeric_cols))
-            
-        if missing_count > 0:
-            st.warning("Missing data value footprints discovered across attributes:")
-            st.write(df.isnull().sum()[df.isnull().sum() > 0])
+        missing_count = df.isnull().sum().sum()
+        col1.metric("Missing Target Values", missing_count, delta=f"{'Action Needed' if missing_count > 0 else 'Clean Data'}")
+        col2.metric("Duplicate Row Footprints", df.duplicated().sum())
+        
+        numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
+        col3.metric("Numeric Features Quantified", len(numeric_cols))
             
         st.markdown("---")
         st.subheader("Variance & Trend Aggregation")
-        
         if len(numeric_cols) >= 1:
             selected_var_col = st.selectbox("Select Target Numeric Feature for Variance Tracking:", numeric_cols)
-            
             v_col1, v_col2 = st.columns([1, 2])
             with v_col1:
-                st.write("**Statistical Feature Parameters:**")
+                st.write("**Statistical Parameters:**")
                 st.dataframe(df[selected_var_col].describe(), use_container_width=True)
             with v_col2:
                 fig, ax = plt.subplots(figsize=(6, 3.5))
                 sns.histplot(df[selected_var_col], kde=True, ax=ax, color="#1f77b4")
-                ax.set_title(f"Distribution & Spread Variance: {selected_var_col}")
+                ax.set_title(f"Distribution Variance: {selected_var_col}")
                 st.pyplot(fig)
         else:
-            st.info("No numeric column fields found to process continuous descriptive variance plotting profiles.")
+            st.info("No numeric column fields found.")
 
-    # PAGE 2: Agentic Chat & Generation
+    # PAGE 2: Agentic Chat & Generation UI
     with tab2:
-        st.subheader("Conversational Multi-Agent Execution Path")
+        st.subheader("Interactive Presentation Builder")
         
-        # Render persistent chat history
-        for role, message in st.session_state["chat_history"]:
-            with st.chat_message(role):
-                st.markdown(message)
+        chat_container = st.container(height=400)
+        with chat_container:
+            for role, message in st.session_state["chat_history"]:
+                with st.chat_message(role):
+                    st.markdown(message)
+                    
+        # Extract graph state memory
+        state_snapshot = workflow_engine.get_state(config)
+        state_values = state_snapshot.values if state_snapshot else {}
+        missing_params = state_values.get("missing_params", [])
+        output_ready = state_values.get("output_ready", False)
+
+        st.markdown("---")
+        
+        # --- CONDITIONAL UI RENDERING ---
+        if not output_ready:
+            if missing_params:
+                current_param = missing_params[0]
+                suggestion_map = {
+                    "commentary_type": ["Executive Summary", "Deep Dive Analysis", "Financial Overview"],
+                    "persona": ["C-Suite Executives", "Technical Team", "General Stakeholders"],
+                    "topics": ["Revenue & Margins", "Risk & Anomalies", "Cost Optimization"],
+                    "pages": ["5", "8", "12"],
+                    "title": ["Automated Data Insights", "Quarterly Performance", "Strategic Business Analysis"]
+                }
+                options = suggestion_map.get(current_param, ["Option 1", "Option 2", "Option 3"])
                 
-        # Chat input routes back into the LangGraph state machine
-        if user_prompt := st.chat_input("Provide answer parameters to the assistant..."):
-            with st.chat_message("user"):
-                st.markdown(user_prompt)
-            st.session_state["chat_history"].append(("user", user_prompt))
-            
-            with st.chat_message("assistant"):
-                with st.spinner("Invoking computational state graphs..."):
-                    # The graph resumes exactly from the last saved state for this thread_id
-                    for event in workflow_engine.stream({"messages": [HumanMessage(content=user_prompt)]}, config):
+                chosen_suggestion = st.radio(
+                    f"💡 Suggestions for **{current_param.replace('_', ' ').title()}**:", 
+                    options, 
+                    horizontal=True
+                )
+                
+                with st.form("input_form", clear_on_submit=True):
+                    user_text = st.text_input("✍️ Edit suggestion or type custom input:", value=chosen_suggestion)
+                    submit = st.form_submit_button("Send 📤")
+            else:
+                with st.form("approve_form", clear_on_submit=True):
+                    user_text = st.text_input("Final Step:", value="Approve")
+                    submit = st.form_submit_button("Generate Deck 🚀")
+
+            if submit and user_text:
+                st.session_state["chat_history"].append(("user", user_text))
+                with st.spinner("Processing next step..."):
+                    for event in workflow_engine.stream({"messages": [HumanMessage(content=user_text)]}, config):
                         for value in event.values():
                             if "messages" in value:
-                                response_text = value["messages"][-1].content
-                                st.markdown(response_text)
-                                st.session_state["chat_history"].append(("assistant", response_text))
-                                
-            if "ready" in response_text.lower() or st.session_state["final_pptx_bytes"]:
+                                st.session_state["chat_history"].append(("assistant", value["messages"][-1].content))
                 st.rerun()
+                
+        else:
+            # Output is ready: Display Download Button Inline
+            st.success("🎉 Presentation compiled successfully! The deck includes your structured insights and the automated graph.")
+            
+            final_title = state_values.get('presentation_params', {}).get('title', 'Automated_Insights')
+            safe_title = final_title.replace(" ", "_")
+            
+            st.download_button(
+                label="📥 Download Generated Presentation (.pptx)",
+                data=st.session_state["final_pptx_bytes"],
+                file_name=f"{safe_title}.pptx",
+                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                use_container_width=True,
+                type="primary"
+            )
 else:
     st.info("👋 System Idle. Please upload an Excel or CSV file in the sidebar to populate the dashboard modules.")
